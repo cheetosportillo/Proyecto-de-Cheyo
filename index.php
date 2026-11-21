@@ -32,6 +32,13 @@ require_once __DIR__ . '/app/core/Database.php';
 require_once __DIR__ . '/app/core/Permisos.php';
 require_once __DIR__ . '/app/core/Controller.php';
 
+// Bloque 1.2: sin config/instalado.lock el sistema aún no está instalado -> instalador web.
+// (install.php crea el candado solo; si ya existe una BD con usuarios, lo crea en el primer acceso.)
+if (!is_file(__DIR__ . '/config/instalado.lock')) {
+    header('Location: ' . base_url() . '/install.php');
+    exit;
+}
+
 $c = strtolower($_GET['c'] ?? 'dashboard');
 $a = $_GET['a'] ?? 'index';
 
