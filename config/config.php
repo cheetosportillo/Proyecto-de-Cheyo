@@ -1,6 +1,6 @@
 <?php
 define('APP_NAME', 'Joyería Onix');
-define('MONEDA', '$/');
+define('MONEDA', '$ ');
 
 // Se pueden sobrescribir con variables de entorno (las usa la suite tests/).
 define('DB_HOST', getenv('ONIX_DB_HOST') ?: '127.0.0.1');
