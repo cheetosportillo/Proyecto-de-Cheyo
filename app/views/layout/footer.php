@@ -1,7 +1,7 @@
     </main>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="<?= asset('vendor/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
+<script src="<?= asset('vendor/sweetalert2/sweetalert2.all.min.js') ?>"></script>
 <script>const BASE_URL = <?= json_encode(base_url() . '/index.php') ?>, MONEDA = <?= json_encode(MONEDA) ?>;</script>
 <script src="<?= asset('js/app.js') ?>"></script>
 <?php if (!empty($scripts)) foreach ($scripts as $s): ?>

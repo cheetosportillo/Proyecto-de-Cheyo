@@ -14,8 +14,8 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="<?= e(Controller::csrf()) ?>">
     <title><?= e($titulo ?? 'Sistema') ?> | <?= APP_NAME ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="<?= asset('vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
+    <link href="<?= asset('vendor/bootstrap-icons/font/bootstrap-icons.min.css') ?>" rel="stylesheet">
     <link href="<?= asset('css/estilos.css') ?>" rel="stylesheet">
 </head>
 <body>
@@ -39,7 +39,11 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
             <i class="bi bi-person-circle"></i> <?= e($usr['nombre']) ?><br>
             <span class="badge bg-warning text-dark"><?= $esDuena ? 'Dueña' : 'Cajero' ?></span>
         </div>
-        <a class="btn btn-outline-light btn-sm" href="<?= e(url('auth', 'logout')) ?>"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+        <!-- N11: el cierre de sesión es POST + token CSRF -->
+        <form method="post" action="<?= e(url('auth', 'logout')) ?>" class="m-0">
+            <input type="hidden" name="csrf" value="<?= e(Controller::csrf()) ?>">
+            <button class="btn btn-outline-light btn-sm w-100" type="submit"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</button>
+        </form>
     </nav>
 
     <!-- Contenido -->

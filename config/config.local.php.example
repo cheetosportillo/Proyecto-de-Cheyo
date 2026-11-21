@@ -1,0 +1,13 @@
+<?php
+/**
+ * Copia este archivo como  config/config.local.php  y ajusta los datos de TU equipo.
+ * config.local.php está en .gitignore: nunca se sube al repositorio.
+ * (El instalador de la Fase 2 generará este archivo automáticamente.)
+ */
+return [
+    'host' => '127.0.0.1',
+    'port' => '3306',          // XAMPP por defecto 3306 (si tu MariaDB usa 3307, cámbialo aquí)
+    'name' => 'joyeria_onix',
+    'user' => 'root',          // en producción: 'onix_app' (el instalador lo crea)
+    'pass' => '',
+];

@@ -12,6 +12,8 @@ class Database
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
+                // ERR-07: NOW()/CURDATE() de MariaDB también en hora de El Salvador (UTC-6).
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '-06:00'",
             ]);
         }
         return self::$pdo;

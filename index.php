@@ -1,16 +1,32 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+// N11: en producción jamás se muestran errores al usuario; solo se registran en el log de PHP/Apache.
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+ini_set('log_errors', '1');
 error_reporting(E_ALL);
 
 /**
  * Front controller / enrutador MVC.
  * URL: index.php?c=controlador&a=accion
  */
-session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
-session_start();
+require_once __DIR__ . '/config/config.php';   // zona horaria + constantes (antes de la sesión)
 
-require_once __DIR__ . '/config/config.php';
+// Cabeceras defensivas básicas (offline-safe, no cargan nada externo).
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: same-origin');
+
+// N11: sesión endurecida (modo estricto, solo cookies, SameSite=Strict, Secure si hay HTTPS).
+$__https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.use_strict_mode', '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.gc_maxlifetime', (string)(SESION_INACTIVIDAD * 2));
+session_name('ONIXSID');   // nombre propio: no se mezcla con otras apps de localhost
+session_set_cookie_params(['lifetime' => 0, 'secure' => $__https, 'httponly' => true, 'samesite' => 'Strict']);
+session_start();
+unset($__https);
+
 require_once __DIR__ . '/app/core/helpers.php';
 require_once __DIR__ . '/app/core/Database.php';
 require_once __DIR__ . '/app/core/Permisos.php';
@@ -29,7 +45,9 @@ $clase = ucfirst($c) . 'Controller';
 require_once __DIR__ . "/app/controllers/$clase.php";
 
 $ctrl = new $clase();
-if (!method_exists($ctrl, $a) || !(new ReflectionMethod($ctrl, $a))->isPublic()) {
+// Solo son rutas los métodos públicos declarados en el controlador concreto (no los heredados de Controller).
+$rm = method_exists($ctrl, $a) ? new ReflectionMethod($ctrl, $a) : null;
+if (!$rm || !$rm->isPublic() || $rm->isStatic() || $rm->getDeclaringClass()->getName() === 'Controller') {
     http_response_code(404);
     exit('Acción no encontrada');
 }
@@ -43,6 +61,6 @@ try {
         header('Content-Type: application/json');
         echo json_encode(['ok' => false, 'msg' => 'Error interno del servidor.']);
     } else {
-        echo 'Error interno del servidor. Revisa la conexión a la base de datos en config/config.php';
+        echo 'Error interno del servidor. Si persiste, verifica que MariaDB esté activo y los datos de config/config.local.php.';
     }
 }

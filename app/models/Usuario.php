@@ -8,6 +8,13 @@ class Usuario
         return $st->fetch() ?: null;
     }
 
+    public static function porId(int $id): ?array
+    {
+        $st = Database::get()->prepare('SELECT * FROM usuarios WHERE id_usuario = ? LIMIT 1');
+        $st->execute([$id]);
+        return $st->fetch() ?: null;
+    }
+
     public static function listar(): array
     {
         return Database::get()->query('SELECT id_usuario, nombre, usuario, rol, estado, created_at FROM usuarios ORDER BY nombre')->fetchAll();
