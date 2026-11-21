@@ -1,5 +1,5 @@
 <?php
-/** Conexión PDO única (singleton). */
+/** Conexión PDO única (singleton) + transacciones con reintento ante deadlock. */
 class Database
 {
     private static ?PDO $pdo = null;
@@ -15,5 +15,33 @@ class Database
             ]);
         }
         return self::$pdo;
+    }
+
+    /**
+     * Ejecuta $fn dentro de una transacción. Si MariaDB aborta por deadlock (1213) o
+     * timeout de bloqueo (1205), repite TODA la transacción (incluida la secuencia de ticket).
+     * Si ya hay una transacción abierta, simplemente ejecuta $fn dentro de ella.
+     */
+    public static function transaccion(callable $fn, int $reintentos = 5)
+    {
+        $pdo = self::get();
+        if ($pdo->inTransaction()) return $fn($pdo);
+
+        for ($intento = 1; ; $intento++) {
+            $pdo->beginTransaction();
+            try {
+                $r = $fn($pdo);
+                $pdo->commit();
+                return $r;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                $codigo = $e instanceof PDOException ? (int)($e->errorInfo[1] ?? 0) : 0;
+                if (in_array($codigo, [1213, 1205], true) && $intento < $reintentos) {
+                    usleep(random_int(10, 60) * 1000 * $intento); // espera aleatoria creciente
+                    continue;
+                }
+                throw $e;
+            }
+        }
     }
 }

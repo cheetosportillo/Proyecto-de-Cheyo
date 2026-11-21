@@ -45,6 +45,22 @@ abstract class Controller
         }
     }
 
+
+    /** ¿El usuario en sesión tiene este permiso? (inventario.gestionar, caja.operar, etc.) */
+    protected function puede(string $permiso): bool { return Permisos::tiene($permiso); }
+
+    /** Exige un permiso. En peticiones AJAX responde JSON 403; en páginas, la vista 403. */
+    protected function requirePermiso(string $permiso, bool $ajax = false): void
+    {
+        $this->requireLogin();
+        if (!Permisos::tiene($permiso)) {
+            if ($ajax) $this->json(['ok' => false, 'msg' => 'No tienes permiso para esta acción.'], 403);
+            http_response_code(403);
+            $this->render('auth/403');
+            exit;
+        }
+    }
+
     /* ---------- CSRF ---------- */
     public static function csrf(): string
     {

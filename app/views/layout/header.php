@@ -26,13 +26,13 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
             <i class="bi bi-gem"></i> <?= APP_NAME ?>
         </a>
         <ul class="nav nav-pills flex-column gap-1 mb-auto">
-            <?= nav_item('dashboard', 'bi-speedometer2', 'Dashboard', $ctrl) ?>
-            <?= nav_item('venta', 'bi-cash-coin', 'Ventas (Caja)', $ctrl) ?>
-            <?= nav_item('producto', 'bi-box-seam', 'Inventario', $ctrl) ?>
-            <?php if ($esDuena): ?>
-                <?= nav_item('compra', 'bi-truck', 'Compras / Proveedores', $ctrl) ?>
-                <?= nav_item('usuario', 'bi-people', 'Usuarios', $ctrl) ?>
-            <?php endif; ?>
+            <?php if (Permisos::tiene('dashboard.ver')): ?><?= nav_item('dashboard', 'bi-speedometer2', 'Dashboard', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('ventas.cobrar')): ?><?= nav_item('venta', 'bi-cash-coin', 'Ventas (POS)', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('caja.operar')): ?><?= nav_item('caja', 'bi-safe2', 'Caja', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('inventario.consultar')): ?><?= nav_item('producto', 'bi-box-seam', 'Inventario', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('kardex.ver')): ?><?= nav_item('kardex', 'bi-journal-text', 'Kardex', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('compras.gestionar')): ?><?= nav_item('compra', 'bi-truck', 'Compras / Proveedores', $ctrl) ?><?php endif; ?>
+            <?php if ($esDuena): ?><?= nav_item('usuario', 'bi-people', 'Usuarios', $ctrl) ?><?php endif; ?>
         </ul>
         <hr class="border-secondary">
         <div class="small text-white-50 mb-2">

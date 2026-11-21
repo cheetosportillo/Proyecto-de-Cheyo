@@ -13,12 +13,13 @@ session_start();
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/app/core/helpers.php';
 require_once __DIR__ . '/app/core/Database.php';
+require_once __DIR__ . '/app/core/Permisos.php';
 require_once __DIR__ . '/app/core/Controller.php';
 
 $c = strtolower($_GET['c'] ?? 'dashboard');
 $a = $_GET['a'] ?? 'index';
 
-$permitidos = ['auth', 'dashboard', 'usuario', 'producto', 'venta', 'compra', 'proveedor'];
+$permitidos = ['auth', 'dashboard', 'usuario', 'producto', 'venta', 'compra', 'proveedor', 'categoria', 'caja', 'kardex'];
 if (!in_array($c, $permitidos, true) || !preg_match('/^[a-zA-Z]+$/', $a)) {
     http_response_code(404);
     exit('Página no encontrada');
