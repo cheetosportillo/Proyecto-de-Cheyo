@@ -172,6 +172,9 @@ $chk = fn(string $k) => !empty($datos[$k]) ? 'checked' : '';
         <div class="mb-3"><label class="form-label">Usuario</label>
             <input type="text" name="usuario" class="form-control" maxlength="30" pattern="[A-Za-z0-9._\-]{3,30}" value="<?= $v('usuario') ?>" required>
             <div class="form-text">3-30 caracteres: letras, números, punto, guion y guion bajo.</div></div>
+        <div class="mb-3"><label class="form-label">Correo electrónico <span class="text-muted">(opcional)</span></label>
+            <input type="email" name="email" class="form-control" maxlength="150" value="<?= $v('email') ?>" autocomplete="off">
+            <div class="form-text">Sirve para recuperar la contraseña por correo cuando haya internet. Puedes agregarlo o cambiarlo después en Usuarios.</div></div>
         <div class="row g-3">
             <div class="col-md-6"><label class="form-label">Contraseña</label>
                 <input type="password" name="password" class="form-control" minlength="8" required autocomplete="new-password">

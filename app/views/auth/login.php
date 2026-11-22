@@ -31,6 +31,7 @@
                         <input type="password" name="password" class="form-control" required></div>
                 </div>
                 <button class="btn btn-gold w-100 py-2" type="submit">Ingresar</button>
+                <div class="text-center mt-3"><a class="small" href="<?= e(url('auth', 'recuperar')) ?>">¿Olvidaste tu contraseña?</a></div>
             </form>
         </div>
     </div>

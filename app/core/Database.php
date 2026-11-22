@@ -20,6 +20,24 @@ class Database
     }
 
     /**
+     * ¿La base ya tiene lo que exige el Bloque 1.3? (columnas nuevas de usuarios + tablas nuevas).
+     * Si no se puede conectar lanza la excepción de PDO; solo devuelve false cuando falta estructura.
+     */
+    public static function esquemaAlDia(): bool
+    {
+        $pdo = self::get();
+        try {
+            $pdo->query('SELECT email, reset_token_hash, reset_token_expira FROM usuarios LIMIT 0')->closeCursor();
+            foreach (['configuracion', 'roles', 'permisos', 'rol_permiso', 'recuperacion_intentos'] as $t) {
+                $pdo->query('SELECT 1 FROM `' . $t . '` LIMIT 0')->closeCursor();
+            }
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    /**
      * Ejecuta $fn dentro de una transacción. Si MariaDB aborta por deadlock (1213) o
      * timeout de bloqueo (1205), repite TODA la transacción (incluida la secuencia de ticket).
      * Si ya hay una transacción abierta, simplemente ejecuta $fn dentro de ella.

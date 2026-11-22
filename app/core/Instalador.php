@@ -1,6 +1,6 @@
 <?php
 /**
- * Lógica del instalador web (Bloque 1.2). No depende de Database.php ni de la sesión:
+ * Lógica del instalador web (Bloque 1.2, ampliada en 1.3). No depende de Database.php ni de la sesión:
  * funciona antes de que exista config/config.local.php. Compatible con PHP 8.0.
  *
  * Diseño para XAMPP *y* hosting compartido (InfinityFree):
@@ -13,7 +13,7 @@
  */
 final class Instalador
 {
-    public const VERSION_ESQUEMA = '1.2.0';
+    public const VERSION_ESQUEMA = '1.3.0';
     public const USUARIO_APP     = 'onix_app';
 
     /** 1 GRANT por tabla (principio de mínimo privilegio). La app nunca hace DELETE ni TRUNCATE. */
@@ -23,15 +23,33 @@ final class Instalador
         'cajas'             => 'SELECT, INSERT, UPDATE',
         'categorias'        => 'SELECT, INSERT, UPDATE',
         'compras'           => 'SELECT, INSERT, UPDATE (`estado`, `motivo_anulacion`, `id_usuario_anula`, `fecha_anulacion`)',
+        'configuracion'     => 'SELECT, INSERT, UPDATE',
         'detalle_compra'    => 'SELECT, INSERT',
         'detalle_venta'     => 'SELECT, INSERT',
         'kardex'            => 'SELECT, INSERT',
+        'permisos'          => 'SELECT',
         'productos'         => 'SELECT, INSERT, UPDATE',
         'proveedores'       => 'SELECT, INSERT, UPDATE',
+        'recuperacion_intentos' => 'SELECT, INSERT, UPDATE',
+        'rol_permiso'       => 'SELECT, INSERT, UPDATE',
+        'roles'             => 'SELECT',
         'schema_migrations' => 'SELECT',
         'secuencias'        => 'SELECT, UPDATE',
         'usuarios'          => 'SELECT, INSERT, UPDATE',
         'ventas'            => 'SELECT, INSERT, UPDATE (`estado`, `motivo_anulacion`, `id_usuario_anula`, `fecha_anulacion`, `impresiones`)',
+    ];
+
+    /**
+     * Columnas que se agregaron DESPUÉS de la 1.2 a tablas que ya existen. schema.sql no puede agregarlas
+     * (solo CREATE TABLE IF NOT EXISTS, sin ALTER), así que las agrega migrar() solo si faltan.
+     * Deben coincidir con schema.sql (mismo orden: van al final de la tabla).
+     */
+    public const COLUMNAS_NUEVAS = [
+        'usuarios' => [
+            'email'              => 'ADD COLUMN `email` varchar(150) DEFAULT NULL',
+            'reset_token_hash'   => 'ADD COLUMN `reset_token_hash` varchar(255) DEFAULT NULL',
+            'reset_token_expira' => 'ADD COLUMN `reset_token_expira` datetime DEFAULT NULL',
+        ],
     ];
 
     /* ------------------------------------------------------------------ rutas */
@@ -240,6 +258,64 @@ final class Instalador
         return [$creados, $errores];
     }
 
+    /* ------------------------------------------------- migración 1.2 -> 1.3 */
+
+    /**
+     * Agrega las columnas de COLUMNAS_NUEVAS que falten (idempotente: segunda ejecución no hace nada).
+     * Requiere una cuenta con ALTER (root en XAMPP; el usuario restringido «onix_app» NO la tiene).
+     * Las tablas nuevas ya las crea schema.sql (CREATE TABLE IF NOT EXISTS).
+     *
+     * @return string[] qué se hizo (vacío si ya estaba al día)
+     */
+    public static function migrar(PDO $pdo): array
+    {
+        $hecho = [];
+        $bd = (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
+        foreach (self::COLUMNAS_NUEVAS as $tabla => $cols) {
+            $st = $pdo->prepare('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?');
+            $st->execute([$bd, $tabla]);
+            $existentes = array_map('strtolower', $st->fetchAll(PDO::FETCH_COLUMN));
+            if ($existentes === []) continue;   // la tabla no existe: la crea schema.sql
+            foreach ($cols as $col => $ddl) {
+                if (in_array(strtolower($col), $existentes, true)) continue;
+                try {
+                    $pdo->exec('ALTER TABLE `' . $tabla . '` ' . $ddl);
+                } catch (PDOException $e) {
+                    throw new RuntimeException('No se pudo agregar ' . $tabla . '.' . $col . ' (error ' . self::codigo($e)
+                        . '). Ejecútalo con una cuenta que tenga ALTER (en XAMPP: root). ' . self::mensajeCorto($e), 0, $e);
+                }
+                $hecho[] = 'Columna ' . $tabla . '.' . $col . ' agregada.';
+            }
+        }
+        return $hecho;
+    }
+
+    /**
+     * Si el usuario restringido «onix_app» ya existe en este servidor, le (re)aplica los GRANT de PRIVILEGIOS
+     * (así recibe las tablas nuevas). Mejor esfuerzo: sin permiso o sin ese usuario, devuelve null sin fallar.
+     */
+    public static function reaplicarPrivilegios(PDO $pdo, string $bd): ?string
+    {
+        if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $bd)) return null;
+        try {
+            $st = $pdo->prepare('SELECT COUNT(*) FROM mysql.user WHERE User = ?');
+            $st->execute([self::USUARIO_APP]);
+            if ((int)$st->fetchColumn() === 0) return null;
+            foreach (['localhost', '127.0.0.1'] as $h) {
+                $q = $pdo->prepare('SELECT COUNT(*) FROM mysql.user WHERE User = ? AND Host = ?');
+                $q->execute([self::USUARIO_APP, $h]);
+                if ((int)$q->fetchColumn() === 0) continue;
+                $u = "'" . self::USUARIO_APP . "'@'" . $h . "'";
+                foreach (self::PRIVILEGIOS as $tabla => $privs) {
+                    $pdo->exec('GRANT ' . $privs . ' ON `' . $bd . '`.`' . $tabla . '` TO ' . $u);
+                }
+            }
+        } catch (PDOException $e) {
+            return null;
+        }
+        return 'Permisos de «' . self::USUARIO_APP . '» actualizados para las tablas nuevas.';
+    }
+
     /* --------------------------------------------------- paso 1: base de datos */
 
     /** Valida y normaliza los datos de conexión del formulario. Lanza RuntimeException con mensaje para la persona. */
@@ -307,6 +383,9 @@ final class Instalador
         $n = self::ejecutarArchivo($pdo, self::raiz() . '/schema.sql');
         $pasos[] = 'Esquema cargado (' . $n . ' sentencias, versión ' . self::VERSION_ESQUEMA . ').';
 
+        // 3b) Base creada con una versión anterior: agrega las columnas nuevas (no-op en una instalación nueva).
+        foreach (self::migrar($pdo) as $m) $pasos[] = $m;
+
         // 4) Triggers: mejor esfuerzo.
         [$creados, $errTrig] = self::instalarTriggers($pdo);
         if ($errTrig === []) {
@@ -346,6 +425,8 @@ final class Instalador
             }
         } else {
             $pasos[] = 'Usuario restringido: omitido por elección (la app usará la cuenta indicada).';
+            $actualizado = self::reaplicarPrivilegios($pdo, $c['name']);   // reinstalación sobre una base que ya tenía onix_app
+            if ($actualizado !== null) $pasos[] = $actualizado;
         }
 
         // 6) config/config.local.php
@@ -455,12 +536,16 @@ final class Instalador
         $usuario  = trim((string)($in['usuario'] ?? ''));
         $pass     = (string)($in['password'] ?? '');
         $confirma = (string)($in['password2'] ?? '');
+        $email    = trim((string)($in['email'] ?? ''));
 
         if ($nombre === '' || (int)preg_match_all('/./us', $nombre) > 100) throw new RuntimeException('Escribe el nombre completo de la Dueña (máx. 100 caracteres).');
         if (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $usuario)) throw new RuntimeException('El usuario debe tener 3-30 caracteres (letras, números, . _ -).');
         if (strlen($pass) < 8) throw new RuntimeException('La contraseña debe tener al menos 8 caracteres.');
         if (strlen($pass) > 72) throw new RuntimeException('La contraseña no puede superar 72 bytes.');
         if (!hash_equals($pass, $confirma)) throw new RuntimeException('Las contraseñas no coinciden.');
+        if ($email !== '' && (strlen($email) > 150 || !filter_var($email, FILTER_VALIDATE_EMAIL))) {
+            throw new RuntimeException('El correo no es válido (déjalo vacío si no quieres registrarlo ahora).');
+        }
 
         $cfg = self::leerConfig();
         if ($cfg === null) throw new RuntimeException('Falta config/config.local.php: completa primero el paso de la base de datos.');
@@ -478,8 +563,8 @@ final class Instalador
             $n = (int)$pdo->query('SELECT COUNT(*) FROM usuarios FOR UPDATE')->fetchColumn();
             if ($n > 0) throw new RuntimeException('El sistema ya tiene usuarios: la instalación ya se completó.');
 
-            $pdo->prepare("INSERT INTO usuarios (nombre, usuario, password, rol, estado, codigo_recuperacion_hash, debe_cambiar_password)
-                           VALUES (?,?,?,'duena',1,?,0)")->execute([$nombre, $usuario, $hashPass, $hashCodigo]);
+            $pdo->prepare("INSERT INTO usuarios (nombre, usuario, password, email, rol, estado, codigo_recuperacion_hash, debe_cambiar_password)
+                           VALUES (?,?,?,?,'duena',1,?,0)")->execute([$nombre, $usuario, $hashPass, $email !== '' ? $email : null, $hashCodigo]);
             $idUsuario = (int)$pdo->lastInsertId();
 
             $pdo->prepare('INSERT INTO bitacora (id_usuario, accion, detalle) VALUES (?,?,?)')

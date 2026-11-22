@@ -1,4 +1,4 @@
-# Instalación (Bloque 1.2)
+# Instalación (Bloques 1.2 y 1.3)
 
 `schema.sql` es la fuente única de la estructura. El instalador web (`install.php`) la carga; no hay que importar nada a mano.
 
@@ -20,6 +20,35 @@
 Al terminar se crea `config/instalado.lock` y `install.php` queda inerte. Para reinstalar de cero: borra `config/config.local.php`
 y `config/instalado.lock` **y** vacía la base (si la BD ya tiene usuarios, el instalador no vuelve a abrirse).
 
+## Actualizar desde la 1.2 a la 1.3 (base que ya existe)
+`schema.sql` solo tiene `CREATE TABLE IF NOT EXISTS`: crea las tablas nuevas pero **no agrega** las columnas nuevas de `usuarios`
+(`email`, `reset_token_hash`, `reset_token_expira`). Hasta migrar, el sistema muestra «Falta actualizar la base de datos».
+- **XAMPP / con consola** (cuenta `root`, no la de la app):
+  `php tools/migrar_1_3.php --user=root --pass=` (agrega `--port=3307` si aplica). Es repetible y también da permisos a `onix_app`
+  sobre las tablas nuevas. Repítelo con `--db=joyeria_onix_test` si quieres la base de pruebas migrada sin recrearla.
+- **Hosting sin consola (phpMyAdmin)**: 1) pestaña Importar → `schema.sql` (crea tablas nuevas y semillas, no toca datos);
+  2) pestaña SQL, ejecuta (MariaDB):
+  ```sql
+  ALTER TABLE usuarios
+    ADD COLUMN IF NOT EXISTS `email` varchar(150) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS `reset_token_hash` varchar(255) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS `reset_token_expira` datetime DEFAULT NULL;
+  ```
+  En hosting la app usa la cuenta que dio el panel (con permisos completos): no hay que otorgar nada más.
+Una instalación nueva no necesita nada de esto: `install.php` ya carga todo.
+
+## Bloque 1.3: usuarios, roles, correo y recuperación
+- **Usuarios** (menú, solo Dueña): crear (se genera una *clave temporal* que se ve una sola vez y obliga a cambiarla al entrar), editar
+  (incluye correo), activar/desactivar, restablecer contraseña y editar los permisos del rol Cajero. La Dueña siempre tiene acceso total;
+  `usuarios.gestionar` y `configuracion.gestionar` son solo de la Dueña.
+- **Configuración** (menú, solo Dueña): nombre, teléfono, dirección y mensaje del ticket, y el SMTP con botón de prueba.
+  La contraseña SMTP se guarda **cifrada** con `config/app.key` (se crea sola; respáldala junto con la base o tendrás que volver a escribirla).
+  **InfinityFree** solo deja salir por el puerto **587** (STARTTLS); `mail()` no sirve allí. Gmail necesita «contraseña de aplicación».
+- **«¿Olvidaste tu contraseña?»**: *con internet* → código de 8 caracteres al correo (vale 15 min); *sin internet* → solo la Dueña, con su
+  llave maestra `ONIX-XXXX-XXXX-XXXX` (se rota y se muestra la nueva una vez; queda en bitácora). Ambos con límite de 5 intentos / 15 min.
+  Un empleado sin internet pide a la Dueña «Restablecer contraseña» en Usuarios.
+- Una Dueña creada desde Usuarios recibe su propia llave maestra (se muestra una vez).
+
 ## Verificar que Parte 1 y Parte 2 siguen compatibles
 ```
 php tools/verificar_instalador.php                 # sin BD: compara schema.sql con el volcado de la Parte 2, divisor SQL, código de recuperación
@@ -31,8 +60,7 @@ php tests/run.php
 (Variables de entorno como en `tests/`: `ONIX_DB_PORT=3307`, `ONIX_DB_USER`, `ONIX_DB_PASS`. En Windows: `C:\xampp\php\php.exe …`.)
 
 ## Para los próximos bloques
-- **Recuperación de la Dueña (1.3)**: usar `Recuperacion::verificar($codigo, $usuario['codigo_recuperacion_hash'])`, con límite de intentos;
-  al usarlo, rotar el código (generar otro y mostrarlo una vez) y poner `debe_cambiar_password = 1`.
+- **Recuperación de la Dueña**: hecha en el Bloque 1.3 (`AuthController::restablecerLlave`).
 - **Sincronización del catálogo (PWA)**: pedir `updated_at >= cursor` (con `>=` y restando 1 s: `TIMESTAMP` tiene resolución de segundos).
   El catálogo usa `estado` (no se borra), así que las bajas también viajan en `updated_at`.
 - **Ventas offline**: `trg_ventas_caja_abierta` y `Venta::crear` exigen caja abierta *al sincronizar*. Hay que decidir qué hacer con una

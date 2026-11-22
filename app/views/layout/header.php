@@ -32,13 +32,15 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
             <?php if (Permisos::tiene('inventario.consultar')): ?><?= nav_item('producto', 'bi-box-seam', 'Inventario', $ctrl) ?><?php endif; ?>
             <?php if (Permisos::tiene('kardex.ver')): ?><?= nav_item('kardex', 'bi-journal-text', 'Kardex', $ctrl) ?><?php endif; ?>
             <?php if (Permisos::tiene('compras.gestionar')): ?><?= nav_item('compra', 'bi-truck', 'Compras / Proveedores', $ctrl) ?><?php endif; ?>
-            <?php if ($esDuena): ?><?= nav_item('usuario', 'bi-people', 'Usuarios', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('usuarios.gestionar')): ?><?= nav_item('usuario', 'bi-people', 'Usuarios', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('configuracion.gestionar')): ?><?= nav_item('configuracion', 'bi-gear', 'Configuración', $ctrl) ?><?php endif; ?>
         </ul>
         <hr class="border-secondary">
         <div class="small text-white-50 mb-2">
             <i class="bi bi-person-circle"></i> <?= e($usr['nombre']) ?><br>
             <span class="badge bg-warning text-dark"><?= $esDuena ? 'Dueña' : 'Cajero' ?></span>
         </div>
+        <a href="<?= e(url('auth', 'cambiar')) ?>" class="btn btn-outline-secondary btn-sm w-100 mb-2"><i class="bi bi-key"></i> Cambiar contraseña</a>
         <!-- N11: el cierre de sesión es POST + token CSRF -->
         <form method="post" action="<?= e(url('auth', 'logout')) ?>" class="m-0">
             <input type="hidden" name="csrf" value="<?= e(Controller::csrf()) ?>">

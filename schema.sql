@@ -1,5 +1,5 @@
 -- =====================================================================
--- Joyería Onix · schema.sql  (Bloque 1.2)  ·  versión de esquema 1.2.0
+-- Joyería Onix · schema.sql  (Bloque 1.3)  ·  versión de esquema 1.3.0
 -- Fuente única de verdad de la estructura de la base de datos.
 --
 --  * Base EXACTA: joyeria_onix (2).sql de la Parte 2 (mismos nombres de tablas,
@@ -11,6 +11,15 @@
 --    phpMyAdmin dentro de una base ya creada.
 --  * Los triggers viven aparte (schema_triggers.sql): son opcionales porque
 --    algunos hosting compartidos no permiten crearlos.
+--
+-- Bloque 1.3 (usuarios, RBAC, configuración y recuperación de contraseña):
+--  * usuarios: + email, reset_token_hash, reset_token_expira (las 3 columnas son NULL).
+--  * Tablas nuevas: roles, permisos, rol_permiso (RBAC; usuarios.rol sigue siendo el
+--    ENUM 'duena'/'cajero'), configuracion (clave/valor) y recuperacion_intentos
+--    (límite de intentos de la recuperación de contraseña).
+--  * Una base creada con la versión 1.2 NO recibe las 3 columnas nuevas con este
+--    archivo (CREATE TABLE IF NOT EXISTS no altera tablas existentes): ejecuta
+--    tools/migrar_1_3.php (o las 3 líneas de docs/INSTALACION.md en phpMyAdmin).
 --
 -- Preparado para el modo híbrido (PWA + sincronización):
 --  * uuid_operacion (char(36) NULL UNIQUE) en ventas, compras y caja_movimientos.
@@ -37,6 +46,9 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `codigo_recuperacion_hash` varchar(255) DEFAULT NULL,
   `debe_cambiar_password` tinyint(1) NOT NULL DEFAULT 0,
+  `email` varchar(150) DEFAULT NULL,
+  `reset_token_hash` varchar(255) DEFAULT NULL,
+  `reset_token_expira` datetime DEFAULT NULL,
   PRIMARY KEY (`id_usuario`),
   UNIQUE KEY `usuario` (`usuario`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -277,8 +289,101 @@ CREATE TABLE IF NOT EXISTS `schema_migrations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
+-- RBAC (Bloque 1.3): roles, catálogo de permisos y permisos por rol.
+-- La Dueña tiene acceso total por código (no depende de estas filas).
+-- rol_permiso usa `concedido` 0/1 (se actualiza, nunca se borra).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `roles` (
+  `rol` varchar(20) NOT NULL,
+  `nombre` varchar(60) NOT NULL,
+  `descripcion` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`rol`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `permisos` (
+  `clave` varchar(50) NOT NULL,
+  `modulo` varchar(40) NOT NULL,
+  `descripcion` varchar(150) NOT NULL,
+  PRIMARY KEY (`clave`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `rol_permiso` (
+  `rol` varchar(20) NOT NULL,
+  `permiso` varchar(50) NOT NULL,
+  `concedido` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`rol`,`permiso`),
+  KEY `fk_rolperm_permiso` (`permiso`),
+  CONSTRAINT `fk_rolperm_permiso` FOREIGN KEY (`permiso`) REFERENCES `permisos` (`clave`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_rolperm_rol` FOREIGN KEY (`rol`) REFERENCES `roles` (`rol`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Configuración clave/valor (datos de la joyería y SMTP). La contraseña SMTP
+-- se guarda CIFRADA (ver app/models/Config.php).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `configuracion` (
+  `clave` varchar(60) NOT NULL,
+  `valor` text DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`clave`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Límite de intentos de la recuperación de contraseña (ventana fija por clave).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `recuperacion_intentos` (
+  `clave` varchar(120) NOT NULL,
+  `intentos` int(11) NOT NULL DEFAULT 0,
+  `inicio` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`clave`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
 -- Semillas mínimas (idempotentes)
 -- ---------------------------------------------------------------------
 INSERT IGNORE INTO `secuencias` (`nombre`, `valor`) VALUES ('ticket', 0);
 
 INSERT IGNORE INTO `schema_migrations` (`version`, `descripcion`) VALUES ('1.2.0', 'Esquema base híbrido: uuid_operacion en caja_movimientos, updated_at en catálogo, recuperación de la Dueña');
+
+INSERT IGNORE INTO `schema_migrations` (`version`, `descripcion`) VALUES ('1.3.0', 'Usuarios, RBAC, configuración y recuperación de contraseña híbrida (correo SMTP + llave maestra)');
+
+INSERT IGNORE INTO `roles` (`rol`, `nombre`, `descripcion`) VALUES
+('duena', 'Dueña / Administradora', 'Acceso total al sistema (no editable).'),
+('cajero', 'Empleado / Cajero', 'Permisos que decide la Dueña.');
+
+INSERT IGNORE INTO `permisos` (`clave`, `modulo`, `descripcion`) VALUES
+('dashboard.ver', 'Dashboard', 'Ver el dashboard y los reportes'),
+('ventas.cobrar', 'Ventas', 'Cobrar en el punto de venta'),
+('ventas.reimprimir', 'Ventas', 'Reimprimir tickets (salen marcados como COPIA)'),
+('ventas.anular', 'Ventas', 'Anular ventas'),
+('caja.operar', 'Caja', 'Abrir y cerrar caja y registrar movimientos de efectivo'),
+('inventario.consultar', 'Inventario', 'Consultar productos y existencias'),
+('inventario.gestionar', 'Inventario', 'Crear, editar y dar de baja productos y categorías'),
+('kardex.ver', 'Kardex', 'Ver el kardex y su valorización'),
+('kardex.ajustar', 'Kardex', 'Registrar ajustes de inventario'),
+('compras.gestionar', 'Compras', 'Registrar y anular compras y administrar proveedores'),
+('usuarios.gestionar', 'Administración', 'Administrar usuarios y roles (solo Dueña)'),
+('configuracion.gestionar', 'Administración', 'Configurar la joyería y el correo (solo Dueña)');
+
+INSERT IGNORE INTO `rol_permiso` (`rol`, `permiso`, `concedido`) VALUES
+('cajero', 'dashboard.ver', 0),
+('cajero', 'ventas.cobrar', 1),
+('cajero', 'ventas.reimprimir', 1),
+('cajero', 'ventas.anular', 0),
+('cajero', 'caja.operar', 1),
+('cajero', 'inventario.consultar', 1),
+('cajero', 'inventario.gestionar', 0),
+('cajero', 'kardex.ver', 0),
+('cajero', 'kardex.ajustar', 0),
+('cajero', 'compras.gestionar', 0),
+('cajero', 'usuarios.gestionar', 0),
+('cajero', 'configuracion.gestionar', 0);
+
+INSERT IGNORE INTO `configuracion` (`clave`, `valor`) VALUES
+('negocio_nombre', 'Joyería Onix'),
+('negocio_telefono', ''),
+('negocio_direccion', ''),
+('ticket_mensaje', '¡Gracias por su compra!'),
+('smtp_puerto', '587'),
+('smtp_cifrado', 'tls'),
+('smtp_verificar_ssl', '1');

@@ -3,6 +3,7 @@ config/config.local.php
 config/config.local.php.tmp*
 config/instalado.lock
 config/install.token
+config/app.key
 
 # Respaldos y registros generados en tiempo de ejecución
 backups/

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../models/Usuario.php';
+require_once __DIR__ . '/../models/Config.php';   // ventas/ticket.php usa Config::obtener()
 
 /** Controlador base: sesión, permisos, CSRF, render y JSON. */
 abstract class Controller
@@ -17,6 +18,7 @@ abstract class Controller
     {
         http_response_code($code);
         header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');   // algunas respuestas llevan claves temporales o la llave maestra
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -58,9 +60,11 @@ abstract class Controller
 
     /**
      * Exige sesión válida. En cada petición revalida contra la BD que el usuario siga activo y
-     * refresca sus datos (ERR-06/13). Sin sesión: JSON 401 si es AJAX; redirección al login si es página.
+     * refresca sus datos, rol y permisos (ERR-06/13). Sin sesión: JSON 401 si es AJAX; redirección al login si es página.
+     * Bloque 1.3: si el usuario tiene debe_cambiar_password = 1 solo puede usar las pantallas de cambio de contraseña
+     * ($permitirCambioPendiente = true) y salir; todo lo demás lo manda a auth/cambiar (o JSON 403 con `cambiar_password`).
      */
-    protected function requireLogin(bool $ajax = false): void
+    protected function requireLogin(bool $ajax = false, bool $permitirCambioPendiente = false): void
     {
         $u = $this->usuario();
         if ($u !== null) {
@@ -71,7 +75,9 @@ abstract class Controller
             } else {
                 $_SESSION['usuario']['nombre']  = $fila['nombre'];
                 $_SESSION['usuario']['usuario'] = $fila['usuario'];
-                $_SESSION['usuario']['rol']     = $fila['rol'];   // [Bloque 1.3] aquí también se recargarán los permisos
+                $_SESSION['usuario']['rol']     = $fila['rol'];
+                $_SESSION['usuario']['permisos']     = Permisos::delRol((string)$fila['rol']);   // RBAC: cambios de la Dueña aplican al siguiente clic
+                $_SESSION['usuario']['debe_cambiar'] = (int)($fila['debe_cambiar_password'] ?? 0) === 1;
                 $_SESSION['_actividad'] = time();
             }
         }
@@ -80,6 +86,12 @@ abstract class Controller
                 $this->json(['ok' => false, 'msg' => 'Tu sesión expiró. Inicia sesión de nuevo.', 'login' => url('auth', 'login')], 401);
             }
             $this->redirect('auth', 'login');
+        }
+        if (!$permitirCambioPendiente && !empty($_SESSION['usuario']['debe_cambiar'])) {
+            if ($this->esAjax($ajax)) {
+                $this->json(['ok' => false, 'msg' => 'Debes cambiar tu contraseña antes de continuar.', 'cambiar_password' => url('auth', 'cambiar')], 403);
+            }
+            $this->redirect('auth', 'cambiar');
         }
     }
 

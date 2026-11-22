@@ -43,6 +43,7 @@ async function api(c, a, datos = null, query = '') {
     try {
         const j = await r.json();
         if (j && typeof j === 'object') j.http = r.status;
+        if (j && j.cambiar_password) { location.href = j.cambiar_password; }   // Bloque 1.3: clave temporal pendiente de cambiar
         return j;
     } catch {
         return {ok: false, http: r.status, msg: 'Respuesta inválida del servidor.'};

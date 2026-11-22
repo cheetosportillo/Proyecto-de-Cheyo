@@ -1,6 +1,6 @@
 <?php
 /**
- * Verificación del Bloque 1.2 (solo CLI).
+ * Verificación de los Bloques 1.2 y 1.3 (solo CLI).
  *
  *   php tools/verificar_instalador.php              comprobaciones sin base de datos
  *   php tools/verificar_instalador.php --bd         además RECREA joyeria_onix_test desde schema.sql y revisa la estructura
@@ -56,22 +56,22 @@ $esquema = (string)file_get_contents($raiz . '/schema.sql');
 $triggersSql = (string)file_get_contents($raiz . '/schema_triggers.sql');
 
 echo "\n▶ schema.sql\n";
-$TABLAS = ['bitacora','caja_movimientos','cajas','categorias','compras','detalle_compra','detalle_venta','kardex',
-           'productos','proveedores','schema_migrations','secuencias','usuarios','ventas'];
+$TABLAS = ['bitacora','caja_movimientos','cajas','categorias','compras','configuracion','detalle_compra','detalle_venta','kardex',
+           'permisos','productos','proveedores','recuperacion_intentos','rol_permiso','roles','schema_migrations','secuencias','usuarios','ventas'];
 
-prueba('14 tablas, todas con CREATE TABLE IF NOT EXISTS y 0 ALTER TABLE', function () use ($esquema, $TABLAS) {
+prueba('19 tablas, todas con CREATE TABLE IF NOT EXISTS y 0 ALTER TABLE', function () use ($esquema, $TABLAS) {
     $s = Instalador::dividirSql($esquema);
     $crear = array_values(array_filter($s, fn($x) => stripos($x, 'CREATE TABLE IF NOT EXISTS') === 0));
-    igual(14, count($crear), 'CREATE TABLE');
+    igual(19, count($crear), 'CREATE TABLE');
     afirma(preg_match('/^\s*ALTER TABLE/mi', $esquema) === 0, 'hay ALTER TABLE');
     $nombres = [];
     foreach ($crear as $x) { preg_match('/`(\w+)`/', $x, $m); $nombres[] = $m[1]; }
     sort($nombres);
     igual(implode(',', $TABLAS), implode(',', $nombres), 'tablas');
 });
-prueba('divisor SQL: cada sentencia termina bien (17 = SET + 14 tablas + 2 semillas)', function () use ($esquema) {
+prueba('divisor SQL: cada sentencia termina bien (27 = SET + 19 tablas + 7 semillas)', function () use ($esquema) {
     $s = Instalador::dividirSql($esquema);
-    igual(17, count($s), 'sentencias');
+    igual(27, count($s), 'sentencias');
     foreach ($s as $x) afirma(substr($x, -1) !== ';', 'quedó un ; al final');
 });
 prueba('schema_triggers.sql: 5 triggers (10 sentencias con sus DROP) y el divisor respeta DELIMITER', function () use ($triggersSql) {
@@ -95,14 +95,23 @@ if (is_file($viejo)) {
         }
         afirma(!$mal, implode("\n      ", $mal));
     });
-    prueba('lo ÚNICO nuevo son las 6 columnas pedidas (nada más se agregó)', function () use ($v, $n) {
+    prueba('en las tablas ya existentes lo ÚNICO nuevo son las 9 columnas previstas (1.2: 6, 1.3: email y reset_token_*)', function () use ($v, $n) {
         $extra = [];
-        foreach ($n as $t => $cols) foreach ($cols as $c => $def) if (!isset($v[$t][$c])) $extra[] = "$t.$c";
-        $extra = array_values(array_diff($extra, ['schema_migrations.version', 'schema_migrations.descripcion', 'schema_migrations.aplicada_en']));
+        foreach ($n as $t => $cols) {
+            if (!isset($v[$t])) continue;   // tablas nuevas: se revisan aparte
+            foreach ($cols as $c => $def) if (!isset($v[$t][$c])) $extra[] = "$t.$c";
+        }
         sort($extra);
         $esperado = ['caja_movimientos.uuid_operacion', 'categorias.updated_at', 'productos.updated_at',
-                     'proveedores.updated_at', 'usuarios.codigo_recuperacion_hash', 'usuarios.debe_cambiar_password'];
+                     'proveedores.updated_at', 'usuarios.codigo_recuperacion_hash', 'usuarios.debe_cambiar_password',
+                     'usuarios.email', 'usuarios.reset_token_expira', 'usuarios.reset_token_hash'];
+        sort($esperado);
         igual(implode(',', $esperado), implode(',', $extra), 'columnas nuevas');
+    });
+    prueba('tablas nuevas respecto a la Parte 2: las 5 del Bloque 1.3 + schema_migrations/secuencias si el volcado no las trae', function () use ($v, $n) {
+        $nuevas = array_values(array_diff(array_keys($n), array_keys($v)));
+        sort($nuevas);
+        foreach (['configuracion', 'permisos', 'recuperacion_intentos', 'rol_permiso', 'roles'] as $t) afirma(in_array($t, $nuevas, true), "falta $t");
     });
 }
 
@@ -155,7 +164,7 @@ prueba('esLocal: solo loopback sin cabeceras de proxy', function () {
     $_SERVER = ['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9']; afirma(!Instalador::esLocal(), 'proxy');
     $_SERVER = $bak;
 });
-prueba('los GRANT por tabla cubren exactamente las 14 tablas del esquema', function () use ($TABLAS) {
+prueba('los GRANT por tabla cubren exactamente las 19 tablas del esquema', function () use ($TABLAS) {
     $t = array_keys(Instalador::PRIVILEGIOS);
     sort($t);
     igual(implode(',', $TABLAS), implode(',', $t), 'tablas con GRANT');
@@ -216,6 +225,26 @@ if (in_array('--bd', $argv ?? [], true)) {
         afirma($h && $h['COLUMN_TYPE'] === 'varchar(255)' && $h['n'] === 'YES', 'codigo_recuperacion_hash');
         $d = $q('SELECT COLUMN_TYPE, IS_NULLABLE n, COLUMN_DEFAULT d FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND COLUMN_NAME=?', [$bd, 'usuarios', 'debe_cambiar_password'])->fetch();
         afirma($d && stripos($d['COLUMN_TYPE'], 'tinyint(1)') === 0 && $d['n'] === 'NO' && (string)$d['d'] === '0', 'debe_cambiar_password');
+    });
+    prueba('usuarios 1.3: email VARCHAR(150) NULL, reset_token_hash VARCHAR(255) NULL, reset_token_expira DATETIME NULL', function () use ($q, $bd) {
+        $esp = ['email' => 'varchar(150)', 'reset_token_hash' => 'varchar(255)', 'reset_token_expira' => 'datetime'];
+        foreach ($esp as $col => $tipo) {
+            $r = $q('SELECT COLUMN_TYPE, IS_NULLABLE n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND COLUMN_NAME=?', [$bd, 'usuarios', $col])->fetch();
+            afirma($r && $r['COLUMN_TYPE'] === $tipo && $r['n'] === 'YES', "usuarios.$col");
+        }
+    });
+    prueba('RBAC sembrado: 2 roles, 12 permisos, cajero con 4 permisos (los de la Parte 2) y ninguno reservado', function () use ($pdo) {
+        igual(2, $pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn(), 'roles');
+        igual(12, $pdo->query('SELECT COUNT(*) FROM permisos')->fetchColumn(), 'permisos');
+        $p = $pdo->query("SELECT permiso FROM rol_permiso WHERE rol='cajero' AND concedido=1 ORDER BY permiso")->fetchAll(PDO::FETCH_COLUMN);
+        igual('caja.operar,inventario.consultar,ventas.cobrar,ventas.reimprimir', implode(',', $p), 'permisos del cajero');
+    });
+    prueba('migrar(): una base 1.2 (sin las 3 columnas) las recupera y repetirlo no hace nada', function () use ($pdo) {
+        foreach (['email', 'reset_token_hash', 'reset_token_expira'] as $col) $pdo->exec('ALTER TABLE usuarios DROP COLUMN `' . $col . '`');
+        igual(3, count(Instalador::migrar($pdo)), 'columnas agregadas');
+        igual(0, count(Instalador::migrar($pdo)), 'segunda ejecución');
+        $n = $pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios' AND COLUMN_NAME IN ('email','reset_token_hash','reset_token_expira')")->fetchColumn();
+        igual(3, $n, 'columnas presentes');
     });
     prueba('los inserts de tests/ (usuarios sin las columnas nuevas; movimientos sin uuid) siguen funcionando', function () use ($pdo) {
         $pdo->exec("INSERT IGNORE INTO usuarios (id_usuario, nombre, usuario, password, rol) VALUES (1,'Dueña','duena','x','duena'),(2,'Cajero','cajero','x','cajero')");
