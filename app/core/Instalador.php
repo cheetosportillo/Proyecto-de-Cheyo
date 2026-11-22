@@ -15,6 +15,7 @@ final class Instalador
 {
     public const VERSION_ESQUEMA = '1.3.0';
     public const USUARIO_APP     = 'onix_app';
+    public const USUARIO_BACKUP  = 'onix_backup';   // Bloque 1.4: solo lectura, para los respaldos
 
     /** 1 GRANT por tabla (principio de mínimo privilegio). La app nunca hace DELETE ni TRUNCATE. */
     public const PRIVILEGIOS = [
@@ -125,6 +126,19 @@ final class Instalador
         @unlink(self::archivoToken());
     }
 
+    /** config.local.php tal cual (incluye backup_user / backup_pass si existen). */
+    public static function leerConfigCrudo(): ?array
+    {
+        $f = self::archivoConfig();
+        if (!is_file($f)) return null;
+        try {
+            $c = (static function (string $archivo) { return include $archivo; })($f);
+        } catch (Throwable $e) {
+            return null;
+        }
+        return is_array($c) ? $c : null;
+    }
+
     public static function leerConfig(): ?array
     {
         $f = self::archivoConfig();
@@ -195,7 +209,8 @@ final class Instalador
         $sentencias = [];
         $delim = ';';
         $buf = '';
-        foreach (preg_split('/\R/', $sql) as $linea) {
+        // Solo CRLF/LF/CR: en modo no-UTF8 `\R` también corta en el byte 0x85 (p. ej. dentro de «Å» o «ą») y dañaría respaldos.
+        foreach (preg_split('/\r\n|\n|\r/', $sql) as $linea) {
             $t = trim($linea);
             if ($buf === '') {
                 if ($t === '' || strncmp($t, '--', 2) === 0 || $t[0] === '#') continue;
@@ -397,6 +412,7 @@ final class Instalador
 
         // 5) Usuario restringido (opcional; solo si MariaDB está en este equipo y la cuenta tiene permiso).
         $cfgApp = $c;
+        $cfgBackup = [];
         $cred = null;
         if ($crearUsr) {
             $local = in_array(strtolower($c['host']), ['localhost', '127.0.0.1'], true);
@@ -414,6 +430,9 @@ final class Instalador
                         $cfgApp['pass'] = $pass;
                         $cred = ['usuario' => self::USUARIO_APP, 'clave' => $pass];
                         $pasos[] = 'Usuario restringido «' . self::USUARIO_APP . '» creado y verificado (1 GRANT por tabla; sin DELETE/TRUNCATE).';
+                        $b = self::prepararUsuarioBackup($pdo, $c);
+                        if ($b['config']) { $cfgBackup = $b['config']; }
+                        if ($b['mensaje'] !== '') { if ($b['config']) $pasos[] = $b['mensaje']; else $avisos[] = $b['mensaje']; }
                     } else {
                         self::eliminarUsuarioApp($pdo);
                         $avisos[] = 'Se revirtió el usuario restringido: ' . $problema . ' La app usará la cuenta indicada.';
@@ -434,7 +453,7 @@ final class Instalador
             'host' => $cfgApp['host'], 'port' => $cfgApp['port'], 'name' => $cfgApp['name'],
             'user' => $cfgApp['user'], 'pass' => $cfgApp['pass'],
             'entorno' => $entorno, 'instalado_en' => date('c'),
-        ];
+        ] + $cfgBackup;
         $contenido = self::contenidoConfig($cfg);
         $escrita = self::escribirConfig($contenido);
         if ($escrita) {
@@ -468,6 +487,79 @@ final class Instalador
         }
         if (function_exists('opcache_invalidate')) @opcache_invalidate($ruta, true);
         return true;
+    }
+
+    /* ------------------------------------------------- usuario de respaldos (1.4) */
+
+    /**
+     * Crea «onix_backup» (solo SELECT y SHOW VIEW sobre la base) y lo verifica. Mejor esfuerzo: en hosting compartido
+     * o sin permisos devuelve un aviso y la app respalda con su propia cuenta.
+     * @return array{config:array,mensaje:string} config = claves backup_user/backup_pass para config.local.php (o [])
+     */
+    public static function prepararUsuarioBackup(PDO $pdo, array $c): array
+    {
+        $local = in_array(strtolower((string)$c['host']), ['localhost', '127.0.0.1'], true);
+        if (!$local) return ['config' => [], 'mensaje' => 'Usuario de respaldos «' . self::USUARIO_BACKUP . '» omitido: solo se crea con MariaDB en este mismo equipo (los respaldos usarán la cuenta de la app).'];
+        $pass = bin2hex(random_bytes(24));
+        try {
+            self::crearUsuarioBackup($pdo, $c['name'], $pass);
+        } catch (PDOException $e) {
+            return ['config' => [], 'mensaje' => 'Usuario de respaldos omitido: esta cuenta no puede crear usuarios (error ' . self::codigo($e) . '; normal en hosting compartido). Los respaldos usarán la cuenta de la app.'];
+        }
+        $problema = self::verificarUsuarioBackup($c, $pass);
+        if ($problema !== null) {
+            self::eliminarUsuarioBackup($pdo);
+            return ['config' => [], 'mensaje' => 'Se revirtió el usuario de respaldos: ' . $problema];
+        }
+        return ['config' => ['backup_user' => self::USUARIO_BACKUP, 'backup_pass' => $pass],
+                'mensaje' => 'Usuario de respaldos «' . self::USUARIO_BACKUP . '» creado y verificado (solo lectura).'];
+    }
+
+    /** Agrega backup_user/backup_pass a config.local.php sin tocar el resto. */
+    public static function guardarCredencialesBackup(string $usuario, string $clave): bool
+    {
+        $raw = self::leerConfigCrudo();
+        if ($raw === null) return false;
+        $raw['backup_user'] = $usuario;
+        $raw['backup_pass'] = $clave;
+        return self::escribirConfig(self::contenidoConfig($raw));
+    }
+
+    public static function crearUsuarioBackup(PDO $pdo, string $bd, string $clave): void
+    {
+        // $bd pasó por validarConexion() (solo [A-Za-z0-9_]) y $clave es hexadecimal: seguros de interpolar.
+        foreach (['localhost', '127.0.0.1'] as $h) {
+            $u = "'" . self::USUARIO_BACKUP . "'@'" . $h . "'";
+            $pdo->exec('DROP USER IF EXISTS ' . $u);
+            $pdo->exec('CREATE USER ' . $u . " IDENTIFIED BY '" . $clave . "'");
+            $pdo->exec('GRANT SELECT, SHOW VIEW ON `' . $bd . '`.* TO ' . $u);
+        }
+    }
+
+    public static function eliminarUsuarioBackup(PDO $pdo): void
+    {
+        foreach (['localhost', '127.0.0.1'] as $h) {
+            try { $pdo->exec("DROP USER IF EXISTS '" . self::USUARIO_BACKUP . "'@'" . $h . "'"); } catch (PDOException $e) { /* nada que revertir */ }
+        }
+    }
+
+    public static function verificarUsuarioBackup(array $c, string $clave): ?string
+    {
+        $cu = $c;
+        $cu['user'] = self::USUARIO_BACKUP;
+        $cu['pass'] = $clave;
+        try {
+            $p = self::conectar($cu, true);
+            $p->query('SELECT 1 FROM `usuarios` LIMIT 1')->fetchAll();
+        } catch (PDOException $e) {
+            return 'no se pudo iniciar sesión con «' . self::USUARIO_BACKUP . '» (' . self::mensajeCorto($e) . ').';
+        }
+        try {
+            $p->exec('DELETE FROM `bitacora` WHERE 1 = 0');
+            return 'el usuario de respaldos puede escribir (debe ser solo lectura).';
+        } catch (PDOException $e) {
+            return null;   // 1142: sin permiso de escritura, como se espera
+        }
     }
 
     /* ------------------------------------------------- usuario restringido (N4) */

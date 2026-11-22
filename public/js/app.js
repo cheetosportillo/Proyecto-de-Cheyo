@@ -43,6 +43,7 @@ async function api(c, a, datos = null, query = '') {
     try {
         const j = await r.json();
         if (j && typeof j === 'object') j.http = r.status;
+        if (r.status !== 401 && a !== 'estadoSesion') document.dispatchEvent(new CustomEvent('onix:actividad'));   // el servidor renovó la sesión (aviso de expiración)
         if (j && j.cambiar_password) { location.href = j.cambiar_password; }   // Bloque 1.3: clave temporal pendiente de cambiar
         return j;
     } catch {

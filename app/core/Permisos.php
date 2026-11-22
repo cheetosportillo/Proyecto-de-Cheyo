@@ -12,7 +12,9 @@
 final class Permisos
 {
     /** Solo la Dueña. */
-    public const RESERVADOS = ['usuarios.gestionar', 'configuracion.gestionar'];
+    public const RESERVADOS = ['usuarios.gestionar', 'configuracion.gestionar', 'respaldos.gestionar', 'bitacora.ver'];
+    // respaldos.gestionar y bitacora.ver (Bloque 1.4) viven solo aquí: no hay filas en `permisos`, así que no hacen falta
+    // migraciones y la Dueña las tiene siempre (tiene() devuelve true para 'duena' con cualquier clave).
 
     private const DEFECTO = [
         'duena'  => ['*'],

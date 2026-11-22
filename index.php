@@ -71,7 +71,7 @@ if (empty($_SESSION['_esquema_ok'])) {
 $c = strtolower($_GET['c'] ?? 'dashboard');
 $a = $_GET['a'] ?? 'index';
 
-$permitidos = ['auth', 'dashboard', 'usuario', 'producto', 'venta', 'compra', 'proveedor', 'categoria', 'caja', 'kardex', 'configuracion'];
+$permitidos = ['auth', 'dashboard', 'usuario', 'producto', 'venta', 'compra', 'proveedor', 'categoria', 'caja', 'kardex', 'configuracion', 'respaldo', 'bitacora'];
 if (!in_array($c, $permitidos, true) || !preg_match('/^[a-zA-Z]+$/', $a)) {
     http_response_code(404);
     exit('Página no encontrada');

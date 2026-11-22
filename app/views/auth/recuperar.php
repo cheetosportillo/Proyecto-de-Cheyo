@@ -79,6 +79,7 @@
 <script src="<?= e(asset('vendor/sweetalert2/sweetalert2.all.min.js')) ?>"></script>
 <script>const BASE_URL = <?= json_encode(base_url() . '/index.php') ?>, MONEDA = <?= json_encode(MONEDA) ?>;</script>
 <script src="<?= e(asset('js/app.js')) ?>"></script>
+<script src="<?= e(asset('js/ojito.js')) ?>"></script>
 <script src="<?= e(asset('js/recuperar.js')) ?>"></script>
 </body>
 </html>

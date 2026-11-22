@@ -34,6 +34,8 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
             <?php if (Permisos::tiene('compras.gestionar')): ?><?= nav_item('compra', 'bi-truck', 'Compras / Proveedores', $ctrl) ?><?php endif; ?>
             <?php if (Permisos::tiene('usuarios.gestionar')): ?><?= nav_item('usuario', 'bi-people', 'Usuarios', $ctrl) ?><?php endif; ?>
             <?php if (Permisos::tiene('configuracion.gestionar')): ?><?= nav_item('configuracion', 'bi-gear', 'Configuración', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('respaldos.gestionar')): ?><?= nav_item('respaldo', 'bi-hdd', 'Respaldos', $ctrl) ?><?php endif; ?>
+            <?php if (Permisos::tiene('bitacora.ver')): ?><?= nav_item('bitacora', 'bi-clipboard-data', 'Bitácora', $ctrl) ?><?php endif; ?>
         </ul>
         <hr class="border-secondary">
         <div class="small text-white-50 mb-2">

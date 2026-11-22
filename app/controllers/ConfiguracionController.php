@@ -17,7 +17,7 @@ class ConfiguracionController extends Controller
             'c'             => Config::todas(true),
             'tienePassword' => Config::tieneSecreto('smtp_password'),
             'correoPrueba'  => (string)($yo['email'] ?? ''),
-            'scripts'       => ['configuracion.js'],
+            'scripts'       => ['ojito.js', 'configuracion.js'],
         ]);
     }
 

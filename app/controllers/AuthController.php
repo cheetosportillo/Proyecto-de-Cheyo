@@ -74,6 +74,7 @@ class AuthController extends Controller
         $this->render('auth/cambiar', [
             'obligatorio' => !empty($_SESSION['usuario']['debe_cambiar']),
             'nombre'      => (string)$_SESSION['usuario']['nombre'],
+            'esDuena'     => ($_SESSION['usuario']['rol'] ?? '') === 'duena',
             'inicio'      => url(...$this->destinoInicial()),
         ], false);
     }
@@ -110,6 +111,61 @@ class AuthController extends Controller
         session_regenerate_id(true);
         $_SESSION['usuario']['debe_cambiar'] = false;
         $this->json(['ok' => true, 'msg' => 'Contraseña actualizada.', 'ir' => url(...$this->destinoInicial())]);
+    }
+
+    /**
+     * Dueña: genera una llave maestra nueva (ONIX-XXXX-XXXX-XXXX), invalida la anterior y la muestra UNA sola vez.
+     * Exige la contraseña actual (con límite de intentos) y queda en bitácora.
+     */
+    public function regenerarLlave(): void
+    {
+        $this->requireLogin(true);   // quien tiene una clave temporal pendiente debe cambiarla primero
+        $this->verificarCsrf();
+        $id = (int)$this->usuario()['id'];
+        $actual = (string)($this->entrada()['actual'] ?? '');
+        $fila = Usuario::porId($id);
+        if (!$fila || $fila['rol'] !== 'duena') $this->json(['ok' => false, 'msg' => 'Solo la Dueña tiene llave maestra.'], 403);
+
+        $clave = 'cambio:' . $id;   // mismo contador que «cambiar contraseña»: ambos adivinan la contraseña actual
+        if (Intentos::excedido($clave, self::MAX_FALLOS, self::VENTANA)) {
+            $this->json(['ok' => false, 'msg' => 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'], 429);
+        }
+        if (!password_verify($actual, (string)$fila['password'])) {
+            usleep(500000);
+            Intentos::sumar($clave, self::VENTANA);
+            $this->json(['ok' => false, 'msg' => 'La contraseña no es correcta.']);
+        }
+        [$llave, $hash] = Recuperacion::generar();
+        $tenia = !empty($fila['codigo_recuperacion_hash']);
+        Database::transaccion(function () use ($id, $hash, $tenia) {
+            Database::get()->prepare('UPDATE usuarios SET codigo_recuperacion_hash = ? WHERE id_usuario = ?')->execute([$hash, $id]);
+            Bitacora::registrar($id, 'LLAVE_REGENERADA', $tenia ? 'La Dueña regeneró su llave maestra; la anterior quedó invalidada.' : 'La Dueña generó su llave maestra.');
+        });
+        Intentos::limpiar($clave);
+        $this->json(['ok' => true, 'msg' => 'Llave maestra regenerada. La anterior ya no sirve.', 'llave' => $llave, 'usuario' => $fila['usuario']]);
+    }
+
+    /* ===================================================================== sesión (aviso de expiración) */
+
+    /**
+     * Cuánto falta para que venza la sesión por inactividad. NO la renueva (no pasa por requireLogin), así el
+     * navegador puede preguntar sin alargar la sesión. Si ya venció responde activa=false (200, sin redirigir).
+     */
+    public function estadoSesion(): void
+    {
+        $u = $this->usuario();
+        if ($u === null) $this->json(['ok' => true, 'activa' => false]);
+        $resta = SESION_INACTIVIDAD - (time() - (int)($_SESSION['_actividad'] ?? time()));
+        $this->json(['ok' => true, 'activa' => true, 'restante' => max(0, $resta), 'total' => SESION_INACTIVIDAD]);
+    }
+
+    /** «Seguir trabajando»: renueva la sesión sin recargar. Vencida => ok=false (no 401, para no sacar al usuario de la pantalla). */
+    public function renovar(): void
+    {
+        $this->verificarCsrf();
+        if ($this->usuario() === null) $this->json(['ok' => false, 'expirada' => true, 'msg' => 'La sesión ya venció.']);
+        $this->requireLogin(true, true);   // revalida contra la BD y reinicia el conteo de inactividad
+        $this->json(['ok' => true, 'restante' => SESION_INACTIVIDAD]);
     }
 
     /* ===================================================================== recuperación híbrida */

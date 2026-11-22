@@ -1,6 +1,6 @@
 <?php
 /**
- * Verificación de los Bloques 1.2 y 1.3 (solo CLI).
+ * Verificación de los Bloques 1.2, 1.3 y 1.4 (solo CLI).
  *
  *   php tools/verificar_instalador.php              comprobaciones sin base de datos
  *   php tools/verificar_instalador.php --bd         además RECREA joyeria_onix_test desde schema.sql y revisa la estructura
@@ -171,6 +171,25 @@ prueba('los GRANT por tabla cubren exactamente las 19 tablas del esquema', funct
     foreach (Instalador::PRIVILEGIOS as $tabla => $p) afirma(stripos($p, 'DELETE') === false && stripos($p, 'DROP') === false, "$tabla permite borrar");
 });
 
+echo "\n▶ Bloque 1.4 (respaldos, bitácora, herramientas de consola)\n";
+prueba('backups/ viene protegido (.htaccess «Require all denied») y su contenido está fuera de git', function () use ($raiz) {
+    $ht = (string)@file_get_contents($raiz . '/backups/.htaccess');
+    afirma(str_contains($ht, 'Require all denied') && str_contains($ht, 'Deny from all'), 'backups/.htaccess');
+    $gi = (string)file_get_contents($raiz . '/.gitignore');
+    afirma(str_contains($gi, "backups/*") && str_contains($gi, '!backups/.htaccess'), '.gitignore de backups');
+});
+prueba('tools/reset_duena.php, crear_usuario_backup.php e instalar_triggers.php solo corren en consola (404 por web)', function () use ($raiz) {
+    foreach (['reset_duena.php', 'crear_usuario_backup.php', 'instalar_triggers.php'] as $f) {
+        $src = (string)file_get_contents($raiz . '/tools/' . $f);
+        afirma(preg_match('/^<\?php\s*\/\*\*.*?\*\/\s*if \(PHP_SAPI !== \'cli\'\) \{ http_response_code\(404\); exit; \}/s', $src) === 1, "$f sin guarda CLI al inicio");
+    }
+    afirma(is_file($raiz . '/tools/.htaccess'), 'tools/.htaccess');
+});
+prueba('el usuario de respaldos es de solo lectura por diseño (SELECT/SHOW VIEW) y no figura en PRIVILEGIOS de la app', function () {
+    afirma(!array_key_exists(Instalador::USUARIO_BACKUP, Instalador::PRIVILEGIOS));
+    afirma(Instalador::USUARIO_BACKUP === 'onix_backup' && Instalador::USUARIO_BACKUP !== Instalador::USUARIO_APP);
+});
+
 /* ======================================================================= BD */
 if (in_array('--bd', $argv ?? [], true)) {
     $conTriggers = in_array('--triggers', $argv ?? [], true);
@@ -285,7 +304,7 @@ if (in_array('--bd', $argv ?? [], true)) {
     }
 
     // Se deja la BD limpia y lista para tests/run.php
-    try { $recrear(); echo "\n  BD «$bd» recreada limpia desde schema.sql. Ahora ejecuta:  php tests/run.php\n"; }
+    try { $recrear(); echo "\n  BD «{$bd}» recreada limpia desde schema.sql. Ahora ejecuta:  php tests/run.php\n"; }
     catch (Throwable $e) { echo "\n  No se pudo dejar la BD limpia: " . $e->getMessage() . "\n"; $fallos++; }
 } else {
     echo "\n  (Para probar contra MariaDB y dejar joyeria_onix_test lista:  php tools/verificar_instalador.php --bd)\n";

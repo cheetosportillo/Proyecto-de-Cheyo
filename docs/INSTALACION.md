@@ -49,6 +49,24 @@ Una instalación nueva no necesita nada de esto: `install.php` ya carga todo.
   Un empleado sin internet pide a la Dueña «Restablecer contraseña» en Usuarios.
 - Una Dueña creada desde Usuarios recibe su propia llave maestra (se muestra una vez).
 
+## Bloque 1.4: respaldos, bitácora, llave maestra y calidad de vida
+No cambia la base de datos: **no hay migración** (los permisos `respaldos.gestionar` y `bitacora.ver` son solo de la Dueña por código).
+- **Respaldos** (menú, solo Dueña): «Generar y descargar» crea un `.sql` en `backups/` (carpeta ignorada por git y con `.htaccess`
+  «Require all denied») y lo descarga; la lista permite bajar los anteriores y marca los incompletos. Es PHP puro vía PDO (sin `mysqldump`),
+  con instantánea consistente: se puede seguir vendiendo. Cada generación/descarga queda en bitácora.
+  Contiene datos sensibles (hashes, correos, ventas): guárdalo **fuera de la tienda**. Respalda aparte `config/app.key` (cifra la clave SMTP).
+  Si puedes, apunta `ONIX_BACKUP_DIR` a una carpeta fuera de la raíz web.
+- **Restaurar**: el `.sql` incluye `DROP TABLE IF EXISTS` + `CREATE TABLE` + datos, así que *reemplaza* lo que haya. En phpMyAdmin: elige la base →
+  Importar. Con consola: `mysql -u root joyeria_onix < backups/respaldo_….sql`. **No incluye triggers** y `DROP TABLE` borra los que tenía la tabla: después de restaurar ejecuta
+  `php tools/instalar_triggers.php --user=root --pass=` (solo si usas los triggers; son «mejor esfuerzo»).
+- **Usuario `onix_backup` (opcional, XAMPP)**: `php tools/crear_usuario_backup.php --user=root --pass=` crea una cuenta de solo lectura y guarda sus
+  credenciales en `config/config.local.php`; las instalaciones nuevas en XAMPP la crean solas. En hosting compartido se omite con aviso y se usa la cuenta de la app.
+- **Bitácora** (menú, solo Dueña): filtros por fecha, usuario y acción, 50 por página y «Exportar CSV» (hasta 50 000 filas; celdas que empiezan con
+  `= + - @` se neutralizan). Es solo lectura.
+- **Llave maestra**: en «Cambiar contraseña» (solo Dueña) → «Regenerar llave maestra»: pide la contraseña, anula la anterior y muestra la nueva una vez (imprimible).
+- **Emergencia**: `php tools/reset_duena.php [--usuario=NOMBRE]` (solo consola) activa la cuenta, da una clave temporal y una llave nueva, y lo deja en bitácora.
+- **Calidad de vida**: ojito en todos los campos de contraseña; aviso 2 min antes de que venza la sesión (30 min, sin cambios) con «Seguir trabajando».
+
 ## Verificar que Parte 1 y Parte 2 siguen compatibles
 ```
 php tools/verificar_instalador.php                 # sin BD: compara schema.sql con el volcado de la Parte 2, divisor SQL, código de recuperación

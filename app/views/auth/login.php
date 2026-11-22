@@ -36,5 +36,6 @@
         </div>
     </div>
 </div>
+<script src="<?= asset('js/ojito.js') ?>"></script>
 </body>
 </html>
