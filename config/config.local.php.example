@@ -1,0 +1,14 @@
+<?php
+/**
+ * Normalmente NO necesitas copiar este archivo: el instalador web (install.php) genera
+ * config/config.local.php por ti. Úsalo solo si prefieres configurarlo a mano.
+ * config.local.php está en .gitignore: nunca se sube al repositorio.
+ */
+return [
+    'host' => '127.0.0.1',     // XAMPP: 127.0.0.1 (no 'localhost'). Hosting: p. ej. sql123.infinityfree.com
+    'port' => '3306',          // XAMPP por defecto 3306 (si tu MariaDB usa 3307, cámbialo aquí)
+    'name' => 'joyeria_onix',  // hosting: el nombre exacto que muestra tu panel (if0_...)
+    'user' => 'root',          // XAMPP con el instalador: 'onix_app'. Hosting: el usuario que te dio el panel
+    'pass' => '',
+    // Opcionales (los escribe el instalador): 'entorno' => 'xampp' | 'hosting', 'instalado_en' => '...'
+];

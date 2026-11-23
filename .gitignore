@@ -1,0 +1,20 @@
+# Credenciales locales (las genera el instalador; NUNCA se suben)
+config/config.local.php
+config/config.local.php.tmp*
+config/instalado.lock
+config/install.token
+config/app.key
+
+# Respaldos y registros generados en tiempo de ejecución
+backups/*
+!backups/.htaccess
+!backups/index.html
+storage/backups/
+storage/logs/
+*.log
+
+# Editores / sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

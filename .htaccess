@@ -1,0 +1,26 @@
+# ============================================================
+# Joyería Onix · Endurecimiento de la raíz (Apache 2.4)  [N12]
+# Requiere AllowOverride All (valor por defecto de XAMPP en htdocs).
+# ============================================================
+Options -Indexes
+ServerSignature Off
+
+<IfModule mod_authz_core.c>
+    # Archivos ocultos (.git*, .env...) y de documentación / BD / respaldos / scripts.
+    <FilesMatch "^\.(?!well-known)|\.(md|sql|patch|diff|bak|log|bat|sh|ps1|dist|example|lock|yml|yaml)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# La carpeta .git es un directorio: se bloquea por ruta (cualquier nivel).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule (^|/)\.git(/|$) - [F,L]
+</IfModule>
+
+# Bloque 2 (PWA): el Service Worker y el manifest no deben quedar en la caché HTTP, o las actualizaciones tardan en llegar.
+<IfModule mod_headers.c>
+    <FilesMatch "^(sw\.js|manifest\.json)$">
+        Header set Cache-Control "no-cache, max-age=0"
+    </FilesMatch>
+</IfModule>
