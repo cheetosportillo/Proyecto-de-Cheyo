@@ -4,7 +4,7 @@ $grupos = [];
 foreach ($catalogo as $p) $grupos[$p['modulo']][] = $p;
 ?>
 <div class="d-flex justify-content-between flex-wrap gap-2 mb-3">
-    <p class="text-muted mb-0">Crea usuarios, asigna roles y restablece contraseñas. Solo la Dueña entra aquí.</p>
+    <p class="text-muted mb-0">Crea usuarios, asigna roles y restablece contraseñas.</p>
     <div class="d-flex gap-2">
         <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#modalPermisos"><i class="bi bi-shield-check"></i> Roles y permisos</button>
         <button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#modalUsuario" data-nuevo="#modalUsuario"><i class="bi bi-person-plus"></i> Nuevo usuario</button>
