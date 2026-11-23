@@ -31,7 +31,7 @@ prueba('(b) vaciar el stock deja saldo_monetario $0.00 exacto (ERR-14) sin perde
 
 prueba('(c) anular una venta tras una compra POSTERIOR re-ingresa costo_total exacto', function () use ($cat) {
     $id = nuevo_producto($cat, 'ORO-C');
-    Kardex::registrarEntrada($id, 'ENTRADA', 4, 1000, 1);                 // 4 x $10.00 -> CPP 10.0000
+    Kardex::registrarEntrada($id, 'ENTRADA', 4, 1000, 1);                 // 4 x $10.00 -> CPP 10.0000 por si se me olvida ejemplificar
     $venta = Kardex::registrarSalida($id, 'SALIDA', 2, 1);                // sale a $10.00 c/u = $20.00
     igual(2000, $venta['valor_total_centavos']);
     Kardex::registrarEntrada($id, 'ENTRADA', 5, 1337, 1);                 // compra posterior a otro precio -> el CPP cambia
@@ -53,7 +53,7 @@ prueba('(d) ajustes se valoran al CPP vigente (K3)', function () use ($cat) {
     Kardex::registrarSalida($id, 'AJUSTE_SALIDA', 2, 1, null, null, 'merma');
     $k = ultimo_kardex($id);
     igual('6.67', $k['valor_total'], 'ajuste de salida al CPP (2 x 3.3333 = 6.6667 -> 6.67)');
-    // El saldo se mantiene en centavos exactos: $20.00 - $6.67 = $13.33 en 4 piezas -> CPP 3.3325
+    // El saldo se mantiene en centavos exactos: $20.00 - $6.67 = $13.33 en 4 piezas -> CPP 3.3325 por las dudas
     igual('13.33', $k['saldo_monetario']);
     igual('3.3325', $k['cpp']);
 });

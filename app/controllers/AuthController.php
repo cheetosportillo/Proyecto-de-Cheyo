@@ -8,10 +8,10 @@ require_once __DIR__ . '/../core/Mailer.php';
 
 class AuthController extends Controller
 {
-    /** Recuperación: 5 fallos por cuenta cada 15 min bloquean ese método durante el resto de la ventana. */
+    /** Recuperacion: 5 fallos por cuenta cada 15 min bloquean ese método durante el resto de la ventana. */
     private const MAX_FALLOS = 5;
     private const VENTANA    = 900;
-    /** Correos de recuperación: 3 solicitudes por cuenta cada 15 min y 20 por hora en total (protege la cuota SMTP). */
+    /** Correos de recuperacion: 3 solicitudes por cuenta cada 15 min y 20 por hora en total (protege la cuota SMTP). */
     private const MAX_SOLICITUDES        = 3;
     private const MAX_CORREOS_POR_HORA   = 20;
 
@@ -114,7 +114,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Dueña: genera una llave maestra nueva (ONIX-XXXX-XXXX-XXXX), invalida la anterior y la muestra UNA sola vez.
+     * La dueña genera una llave maestra nueva, invalida la anterior y la muestra UNA sola vez.
      * Exige la contraseña actual (con límite de intentos) y queda en bitácora.
      */
     public function regenerarLlave(): void
@@ -126,7 +126,7 @@ class AuthController extends Controller
         $fila = Usuario::porId($id);
         if (!$fila || $fila['rol'] !== 'duena') $this->json(['ok' => false, 'msg' => 'Solo la Dueña tiene llave maestra.'], 403);
 
-        $clave = 'cambio:' . $id;   // mismo contador que «cambiar contraseña»: ambos adivinan la contraseña actual
+        $clave = 'cambio:' . $id;   // mismo contador que cambiar contraseña: ambos adivinan la contraseña actual
         if (Intentos::excedido($clave, self::MAX_FALLOS, self::VENTANA)) {
             $this->json(['ok' => false, 'msg' => 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'], 429);
         }
@@ -159,7 +159,7 @@ class AuthController extends Controller
         $this->json(['ok' => true, 'activa' => true, 'restante' => max(0, $resta), 'total' => SESION_INACTIVIDAD]);
     }
 
-    /** «Seguir trabajando»: renueva la sesión sin recargar. Vencida => ok=false (no 401, para no sacar al usuario de la pantalla). */
+    /**Seguir trabajando: renueva la sesión sin recargar. Vencida => ok=false (no 401, para no sacar al usuario de la pantalla). */
     public function renovar(): void
     {
         $this->verificarCsrf();
@@ -170,7 +170,7 @@ class AuthController extends Controller
 
     /* ===================================================================== recuperación híbrida */
 
-    /** «¿Olvidaste tu contraseña?»: método 1 (correo, con internet) y método 2 (llave maestra, sin internet). */
+    /** ¿Olvidaste tu contraseña?: método 1 (correo, con internet) y método 2 (llave maestra, sin internet). */
     public function recuperar(): void
     {
         if ($this->usuario()) $this->redirect('dashboard');
