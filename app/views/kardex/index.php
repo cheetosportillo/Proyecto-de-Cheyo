@@ -14,14 +14,14 @@ $filtro = ['prod' => $prod, 'cat' => $cat, 'desde' => $desde, 'hasta' => $hasta]
     <div class="col text-end">
         <button type="button" class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
         <a class="btn btn-outline-success" href="<?= e(url('kardex', 'csv', $filtro)) ?>"><i class="bi bi-filetype-csv"></i> CSV</a>
-        <?php if ($puedeAjustar): ?><button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAjuste"><i class="bi bi-sliders"></i> Ajuste</button>
+        <?php if ($puedeAjustar): ?><button  type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAjuste"><i class="bi bi-sliders"></i> Ajuste</button>
         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalToma"><i class="bi bi-clipboard-check"></i> Toma física</button><?php endif; ?>
         <?php if ($puedeCargar): ?><button type="button" class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#modalCarga"><i class="bi bi-upload"></i> Carga inicial CSV</button><?php endif; ?>
     </div>
 </form>
 <div class="card"><div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem">
     <thead class="table-light"><tr><th rowspan="2">Fecha</th><th rowspan="2">Producto</th><th rowspan="2">Tipo</th><th colspan="2" class="text-center">Entradas</th><th colspan="2" class="text-center">Salidas</th>
-        <th colspan="4" class="text-center">Saldos</th></tr>
+        <th colspan="4" class="text-center">Saldos</th></tr>    
         <tr><th class="text-end">Cant.</th><th class="text-end">Valor</th><th class="text-end">Cant.</th><th class="text-end">Valor</th><th class="text-end">Piezas</th><th class="text-end">Peso</th><th class="text-end">Monto</th><th class="text-end">CPP</th></tr></thead>
     <tbody>
     <?php foreach ($filas as $k): $es = in_array($k['tipo'], $ent, true); ?>
