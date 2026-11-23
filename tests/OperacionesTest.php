@@ -51,6 +51,13 @@ prueba('caja única: no se pueden abrir dos a la vez', function () {
     lanza(fn() => Caja::abrir(2, 100), 'ya hay una caja abierta');
 });
 
+prueba('venta rechazada si el vuelto supera el efectivo disponible en caja', function () use ($A) {
+    $ventasAntes = (int)Database::get()->query('SELECT COUNT(*) FROM ventas')->fetchColumn();
+    lanza(fn() => Venta::crear(2, [['id' => $A, 'cantidad' => 1]], 10000, uuid4()), 'no hay dinero suficiente en caja');
+    igual($ventasAntes, (int)Database::get()->query('SELECT COUNT(*) FROM ventas')->fetchColumn(), 'no se registra la venta');
+    igual(0, (int)Database::get()->query("SELECT valor FROM secuencias WHERE nombre='ticket'")->fetchColumn(), 'no consume ticket');
+});
+
 $V1 = $V2 = $V3 = 0;
 prueba('venta: ticket correlativo, foto histórica, costo_total y SALIDA en el Kardex', function () use ($A, $B, &$V1, &$V2) {
     $r = Venta::crear(2, [['id' => $B, 'cantidad' => 2], ['id' => $A, 'cantidad' => 3]], 10000, uuid4());

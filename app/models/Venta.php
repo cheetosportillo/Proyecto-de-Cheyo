@@ -49,6 +49,12 @@ class Venta
                 }
                 if ($efectivoCentavos < $total) throw new RuntimeException('El efectivo recibido es menor al total.');
                 $cambio = $efectivoCentavos - $total;
+                if ($cambio > 0) {
+                    $efectivoDisponible = Caja::resumen((int)$caja['id_caja'], true)['esperado'];
+                    if ($cambio > $efectivoDisponible)
+                        throw new RuntimeException('No se puede realizar la venta: no hay dinero suficiente en caja para dar el vuelto de ' .
+                            money(de_centavos($cambio)) . '. Efectivo disponible: ' . money(de_centavos($efectivoDisponible)) . '.');
+                }
 
                 // Ticket correlativo sin huecos: la fila de la secuencia queda bloqueada hasta el COMMIT
                 $pdo->exec("UPDATE secuencias SET valor = LAST_INSERT_ID(valor + 1) WHERE nombre = 'ticket'");
