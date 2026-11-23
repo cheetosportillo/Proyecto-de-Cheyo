@@ -35,6 +35,7 @@ class ConfiguracionController extends Controller
 
         if ($nombre === '' || largo_texto($nombre) > 100) $this->json(['ok' => false, 'msg' => 'Escribe el nombre de la joyería (hasta 100 caracteres).']);
         if (largo_texto($telefono) > 30)   $this->json(['ok' => false, 'msg' => 'El teléfono admite hasta 30 caracteres.']);
+        if ($telefono !== '' && !preg_match('/^[0-9+\-\s()]+$/', $telefono)) $this->json(['ok' => false, 'msg' => 'El teléfono no puede contener letras.']);
         if (largo_texto($direccion) > 200) $this->json(['ok' => false, 'msg' => 'La dirección admite hasta 200 caracteres.']);
         if (largo_texto($mensaje) > 120)   $this->json(['ok' => false, 'msg' => 'El mensaje del ticket admite hasta 120 caracteres.']);
 

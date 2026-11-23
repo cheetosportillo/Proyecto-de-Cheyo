@@ -50,7 +50,7 @@ final class Respaldo
         $c = Instalador::leerConfigCrudo();
         return (is_array($c) && !empty($c['backup_user']))
             ? (string)$c['backup_user'] . ' (solo lectura)'
-            : 'la cuenta de la aplicación';
+            : DB_USER . ' (cuenta de la aplicación)';
     }
 
     /**

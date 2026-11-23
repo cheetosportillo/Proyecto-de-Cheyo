@@ -76,7 +76,7 @@
     <div class="modal-header"><h5 class="modal-title">Nuevo proveedor</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body"><input type="hidden" name="id_proveedor">
         <div class="mb-3"><label class="form-label">Nombre *</label><input name="nombre" class="form-control" required maxlength="120"></div>
-        <div class="mb-3"><label class="form-label">Teléfono</label><input name="telefono" class="form-control" maxlength="30"></div>
+        <div class="mb-3"><label class="form-label">Teléfono</label><input type="tel" name="telefono" class="form-control" maxlength="30" inputmode="numeric" pattern="[0-9+\-\s()]*" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')"></div>
         <div class="mb-3"><label class="form-label">Correo</label><input type="email" name="correo" class="form-control" maxlength="120"></div>
         <div class="mb-3"><label class="form-label">Dirección</label><input name="direccion" class="form-control" maxlength="255"></div>
     </div>

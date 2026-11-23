@@ -11,7 +11,7 @@ $filtro = ['prod' => $prod, 'cat' => $cat, 'desde' => $desde, 'hasta' => $hasta]
     <div class="col-auto"><input type="date" name="hasta" value="<?= e($hasta) ?>" class="form-control"></div>
     <div class="col-auto"><button class="btn btn-dark"><i class="bi bi-funnel"></i></button>
         <?php foreach ($rapidos as $t => [$d, $h]): ?><a class="btn btn-outline-secondary" href="<?= e(url('kardex', 'index', ['prod' => $prod, 'cat' => $cat, 'desde' => $d, 'hasta' => $h])) ?>"><?= $t ?></a> <?php endforeach; ?></div>
-    <div class="col text-end">
+    <div class="col-md-6">
         <button type="button" class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
         <a class="btn btn-outline-success" href="<?= e(url('kardex', 'csv', $filtro)) ?>"><i class="bi bi-filetype-csv"></i> CSV</a>
         <?php if ($puedeAjustar): ?><button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAjuste"><i class="bi bi-sliders"></i> Ajuste</button>
