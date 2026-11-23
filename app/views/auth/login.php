@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Iniciar sesión | <?= APP_NAME ?></title>
+    <link rel="manifest" href="<?= e(base_url()) ?>/manifest.json">
+    <meta name="theme-color" content="#17171c">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= asset('img/icon-192.png') ?>">
+    <link rel="apple-touch-icon" href="<?= asset('img/apple-touch-icon.png') ?>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="<?= asset('vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
     <link href="<?= asset('vendor/bootstrap-icons/font/bootstrap-icons.min.css') ?>" rel="stylesheet">
     <link href="<?= asset('css/estilos.css') ?>" rel="stylesheet">
@@ -37,5 +44,6 @@
     </div>
 </div>
 <script src="<?= asset('js/ojito.js') ?>"></script>
+<script src="<?= asset('js/pwa.js') ?>"></script>
 </body>
 </html>

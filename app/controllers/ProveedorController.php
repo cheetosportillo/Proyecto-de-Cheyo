@@ -16,6 +16,9 @@ class ProveedorController extends Controller
         $tel    = trim($d['telefono'] ?? '');
         if ($nombre === '' || largo_texto($nombre) > 150) $this->json(['ok' => false, 'msg' => 'El nombre del proveedor es obligatorio (máx. 150 caracteres).']);
         if (largo_texto($tel) > 30) $this->json(['ok' => false, 'msg' => 'El teléfono admite máximo 30 caracteres.']);
+        if ($tel !== '' && !preg_match('/^[0-9+\-\s()]+$/', $tel)) {    
+            $this->json(['ok' => false, 'msg' => 'El teléfono no puede contener letras.']);
+            }
         if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) $this->json(['ok' => false, 'msg' => 'El correo no es válido.']);
 
         $datos = ['nombre' => $nombre, 'telefono' => $tel, 'correo' => $correo, 'direccion' => trim($d['direccion'] ?? '')];

@@ -3,13 +3,14 @@ $scripts = ['ventas.js'];
 $jh = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP;
 $qs = fn(int $p) => url('venta', 'index', ['desde' => $desde, 'hasta' => $hasta, 'p' => $p]);
 ?>
-<script>const APP = <?= json_encode(['cajaAbierta' => $cajaAbierta, 'puedeAnular' => $puedeAnular, 'puedeReimprimir' => $puedeReimprimir], $jh) ?>;</script>
+<script>const APP = <?= json_encode(['cajaAbierta' => $cajaAbierta, 'puedeAnular' => $puedeAnular, 'puedeReimprimir' => $puedeReimprimir,
+    'usuarioId' => (int)$_SESSION['usuario']['id'], 'negocio' => (string)Config::obtener('negocio_nombre', APP_NAME), 'sinHistorial' => !empty($sinHistorial)], $jh) ?>;</script>
 <?php if (!$cajaAbierta): ?>
 <div class="alert alert-warning"><i class="bi bi-lock"></i> La caja está <strong>cerrada</strong>: no se puede cobrar. <a href="<?= e(url('caja')) ?>" class="alert-link">Abrir caja</a></div>
 <?php endif; ?>
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item"><button class="nav-link <?= $tabHistorial ? '' : 'active' ?>" data-bs-toggle="tab" data-bs-target="#tabCaja"><i class="bi bi-cash-coin"></i> Caja</button></li>
-    <li class="nav-item"><button class="nav-link <?= $tabHistorial ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tabHistorial"><i class="bi bi-receipt"></i> Historial <?= $verTodas ? '' : '(mis ventas)' ?></button></li>
+    <?php if (empty($sinHistorial)): ?><li class="nav-item"><button class="nav-link <?= $tabHistorial ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tabHistorial"><i class="bi bi-receipt"></i> Historial <?= $verTodas ? '' : '(mis ventas)' ?></button></li><?php endif; ?>
 </ul>
 <div class="tab-content">
 <div class="tab-pane fade <?= $tabHistorial ? '' : 'show active' ?>" id="tabCaja">
@@ -44,6 +45,7 @@ $qs = fn(int $p) => url('venta', 'index', ['desde' => $desde, 'hasta' => $hasta,
   </div>
 </div>
 
+<?php if (empty($sinHistorial)): ?>
 <div class="tab-pane fade <?= $tabHistorial ? 'show active' : '' ?>" id="tabHistorial">
     <form class="row g-2 mb-3" method="get">
         <input type="hidden" name="c" value="venta">
@@ -66,6 +68,7 @@ $qs = fn(int $p) => url('venta', 'index', ['desde' => $desde, 'hasta' => $hasta,
         <?php for ($i = 1; $i <= $h['paginas']; $i++): ?><li class="page-item <?= $i == $h['pagina'] ? 'active' : '' ?>"><a class="page-link" href="<?= e($qs($i)) ?>"><?= $i ?></a></li><?php endfor; ?>
     </ul></nav><?php endif; ?>
 </div>
+<?php endif; ?>
 </div>
 
 <div class="modal fade" id="modalVenta" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">

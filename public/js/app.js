@@ -1,5 +1,12 @@
 /* ===== Utilidades comunes ===== */
-const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+let CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+/** Bloque 2: el token puede renovarse sin recargar (página servida desde la copia sin conexión, o sesión nueva). */
+function actualizarCsrf(t) {
+    if (!t) return;
+    CSRF = t;
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m) m.content = t;
+}
 const fmt = n => MONEDA + Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
 const API_TIMEOUT_MS = 30000;
@@ -15,9 +22,10 @@ function sesionExpirada() {
 /**
  * Llamada al servidor. NUNCA lanza excepción (N1): si cae la red o el servidor tarda demasiado
  * devuelve {ok:false, sinConexion:true, msg}, así ningún botón queda bloqueado para siempre.
+ * `opciones.sinRedirigir` (POS): ante un 401 NO manda al login (se perdería el carrito); devuelve {http:401}.
  * Devuelve siempre {ok, msg, ...} y, cuando hay respuesta HTTP, `http` con el código de estado.
  */
-async function api(c, a, datos = null, query = '') {
+async function api(c, a, datos = null, query = '', opciones = {}) {
     const opt = datos === null ? {} : {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF},
@@ -32,6 +40,7 @@ async function api(c, a, datos = null, query = '') {
             headers: {Accept: 'application/json', ...(opt.headers || {})}
         });
     } catch (err) {
+        document.dispatchEvent(new CustomEvent('onix:red', {detail: {ok: false}}));   // offline.js: el servidor no responde aunque haya wifi
         const agotado = ctl.signal.aborted;
         return {ok: false, sinConexion: true, msg: agotado
             ? 'El servidor tardó demasiado en responder. Revisa si la operación quedó registrada antes de repetirla.'
@@ -39,7 +48,11 @@ async function api(c, a, datos = null, query = '') {
     } finally {
         clearTimeout(timer);
     }
-    if (r.status === 401) { sesionExpirada(); return {ok: false, http: 401, msg: 'Tu sesión expiró. Inicia sesión de nuevo.'}; }
+    document.dispatchEvent(new CustomEvent('onix:red', {detail: {ok: true}}));
+    if (r.status === 401) {
+        if (!opciones.sinRedirigir) sesionExpirada();
+        return {ok: false, http: 401, msg: 'Tu sesión expiró. Inicia sesión de nuevo.'};
+    }
     try {
         const j = await r.json();
         if (j && typeof j === 'object') j.http = r.status;
@@ -47,7 +60,7 @@ async function api(c, a, datos = null, query = '') {
         if (j && j.cambiar_password) { location.href = j.cambiar_password; }   // Bloque 1.3: clave temporal pendiente de cambiar
         return j;
     } catch {
-        return {ok: false, http: r.status, msg: 'Respuesta inválida del servidor.'};
+        return {ok: false, http: r.status, invalida: true, msg: 'Respuesta inválida del servidor.'};
     }
 }
 

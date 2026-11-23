@@ -14,6 +14,13 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="<?= e(Controller::csrf()) ?>">
     <title><?= e($titulo ?? 'Sistema') ?> | <?= APP_NAME ?></title>
+    <link rel="manifest" href="<?= e(base_url()) ?>/manifest.json">
+    <meta name="theme-color" content="#17171c">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?= asset('img/icon-192.png') ?>">
+    <link rel="apple-touch-icon" href="<?= asset('img/apple-touch-icon.png') ?>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="<?= asset('vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
     <link href="<?= asset('vendor/bootstrap-icons/font/bootstrap-icons.min.css') ?>" rel="stylesheet">
     <link href="<?= asset('css/estilos.css') ?>" rel="stylesheet">
@@ -38,6 +45,9 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
             <?php if (Permisos::tiene('bitacora.ver')): ?><?= nav_item('bitacora', 'bi-clipboard-data', 'Bitácora', $ctrl) ?><?php endif; ?>
         </ul>
         <hr class="border-secondary">
+        <!-- Bloque 2: indicador de conexión / cola de ventas sin conexión (lo pinta public/js/offline.js) -->
+        <div class="mb-2" data-onix-estado><div class="onix-estado onix-estado--ok"><span class="onix-estado__main"><span class="onix-punto"></span><span class="onix-texto">En línea</span></span></div></div>
+        <button type="button" id="btnInstalarPwa" class="btn btn-outline-warning btn-sm w-100 mb-2 d-none"><i class="bi bi-download"></i> Instalar app</button>
         <div class="small text-white-50 mb-2">
             <i class="bi bi-person-circle"></i> <?= e($usr['nombre']) ?><br>
             <span class="badge bg-warning text-dark"><?= $esDuena ? 'Dueña' : 'Cajero' ?></span>
@@ -52,5 +62,8 @@ function nav_item(string $c, string $icono, string $texto, string $ctrl): string
 
     <!-- Contenido -->
     <main class="flex-grow-1 p-4 content">
-        <button class="btn btn-dark d-md-none mb-3" onclick="document.getElementById('sidebar').classList.toggle('show')"><i class="bi bi-list"></i> Menú</button>
+        <div class="d-md-none mb-3 d-flex align-items-center gap-2">
+            <button class="btn btn-dark" onclick="document.getElementById('sidebar').classList.toggle('show')"><i class="bi bi-list"></i> Menú</button>
+            <span data-onix-estado data-compacto></span>
+        </div>
         <h3 class="mb-4 titulo-pagina"><?= e($titulo ?? '') ?></h3>

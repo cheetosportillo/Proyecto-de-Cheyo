@@ -4,7 +4,7 @@ $grupos = [];
 foreach ($catalogo as $p) $grupos[$p['modulo']][] = $p;
 ?>
 <div class="d-flex justify-content-between flex-wrap gap-2 mb-3">
-    <p class="text-muted mb-0">Crea usuarios, asigna roles y restablece contraseñas. Solo la Dueña entra aquí.</p>
+    <p class="text-muted mb-0">Crea usuarios, asigna roles y restablece contraseñas.</p>
     <div class="d-flex gap-2">
         <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#modalPermisos"><i class="bi bi-shield-check"></i> Roles y permisos</button>
         <button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#modalUsuario" data-nuevo="#modalUsuario"><i class="bi bi-person-plus"></i> Nuevo usuario</button>
@@ -47,7 +47,7 @@ foreach ($catalogo as $p) $grupos[$p['modulo']][] = $p;
         <div class="mb-3"><label class="form-label">Rol *</label>
             <select name="rol" class="form-select" required><option value="cajero">Empleado / Cajero</option><option value="duena">Dueña / Administradora</option></select></div>
         <div class="alert alert-light border small mb-0"><i class="bi bi-info-circle"></i> Al crear un usuario se genera una <b>clave temporal</b> que verás una sola vez;
-            deberá cambiarla en su primer ingreso. Si lo haces Dueña, también se genera su <b>llave maestra</b>.</div>
+            deberá cambiarla en su primer ingreso. en caso de hacerlo el administrador , también se genera su <b>llave maestra</b>.</div>
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-gold">Guardar</button></div>
   </form></div>
@@ -57,7 +57,7 @@ foreach ($catalogo as $p) $grupos[$p['modulo']][] = $p;
   <div class="modal-dialog modal-lg modal-dialog-scrollable"><form class="modal-content" id="frm-permisos">
     <div class="modal-header"><h5 class="modal-title">Permisos del rol «Empleado / Cajero»</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <p class="small text-muted">La Dueña siempre tiene acceso total. Marca lo que podrá hacer un cajero; el cambio aplica en su siguiente clic.</p>
+        <p class="small text-muted">Administracion de Roles y Permisos</p>
         <?php foreach ($grupos as $modulo => $lista): ?>
             <h6 class="mt-3"><?= e($modulo) ?></h6>
             <?php foreach ($lista as $p): $res = in_array($p['clave'], Permisos::RESERVADOS, true); ?>

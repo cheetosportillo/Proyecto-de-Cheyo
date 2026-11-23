@@ -20,6 +20,18 @@ class Database
     }
 
     /**
+     * Zona horaria efectiva (Bloque 2). PHP, la sesión de MariaDB y NOW() deben coincidir SIEMPRE en hora de El Salvador:
+     * de eso dependen los tickets, el cursor updated_at del catálogo offline y la fecha original de las ventas sin conexión.
+     * @return array{php:string,sesion:string,php_offset:string,diferencia_seg:int}
+     */
+    public static function zonaHoraria(): array
+    {
+        $r = self::get()->query('SELECT @@session.time_zone AS tz, NOW() AS ahora')->fetch();
+        return ['php' => date_default_timezone_get(), 'sesion' => (string)$r['tz'], 'php_offset' => date('P'),
+                'diferencia_seg' => abs(strtotime((string)$r['ahora']) - time())];
+    }
+
+    /**
      * ¿La base ya tiene lo que exige el Bloque 1.3? (columnas nuevas de usuarios + tablas nuevas).
      * Si no se puede conectar lanza la excepción de PDO; solo devuelve false cuando falta estructura.
      */
