@@ -1,4 +1,19 @@
 <?php
+/**
+ * Conflicto de negocio al registrar una venta (caja cerrada, sin stock, precio cambiado…).
+ * Sigue siendo RuntimeException con el MISMO mensaje de siempre; `codigo` permite a la sincronización offline
+ * distinguirlo de un error transitorio.
+ */
+class VentaConflicto extends RuntimeException
+{
+    public string $codigo;
+    public function __construct(string $codigo, string $mensaje)
+    {
+        parent::__construct($mensaje);
+        $this->codigo = $codigo;
+    }
+}
+
 class Venta
 {
     /**
@@ -8,10 +23,15 @@ class Venta
      * Devuelve ['id_venta' => int, 'duplicada' => bool].
      *
      * @param array $items [['id'=>int,'cantidad'=>int], ...]
+     * @param array $extra Solo para ventas hechas sin conexión (Bloque 2), ambos opcionales:
+     *   'fecha_iso'       => momento real de la venta (ISO 8601). Se guarda en hora de El Salvador, sin pasar de «ahora» ni
+     *                        quedar antes de la apertura de la caja donde se registra.
+     *   'total_esperado'  => centavos que se le cobraron al cliente. Si hoy los precios dan otro total NO se registra
+     *                        (conflicto «precio_cambiado»): el cliente ya pagó lo que vio.
      */
-    public static function crear(int $idUsuario, array $items, int $efectivoCentavos, string $uuid): array
+    public static function crear(int $idUsuario, array $items, int $efectivoCentavos, string $uuid, array $extra = []): array
     {
-        if (!uuid_valido($uuid)) throw new RuntimeException('Operación sin identificador válido. Recarga la página.');
+        if (!uuid_valido($uuid)) throw new VentaConflicto('uuid_invalido', 'Operación sin identificador válido. Recarga la página.');
 
         $lineas = [];
         foreach ($items as $it) {
@@ -19,17 +39,17 @@ class Venta
             $lineas[$id] = ['id' => $id, 'cantidad' => ($lineas[$id]['cantidad'] ?? 0) + (int)$it['cantidad']];
         }
         ksort($lineas);   // productos por id_producto ASC antes de cualquier FOR UPDATE
-        if (!$lineas) throw new RuntimeException('El carrito está vacío.');
+        if (!$lineas) throw new VentaConflicto('carrito_vacio', 'El carrito está vacío.');
 
         try {
-            return Database::transaccion(function (PDO $pdo) use ($idUsuario, $lineas, $efectivoCentavos, $uuid) {
+            return Database::transaccion(function (PDO $pdo) use ($idUsuario, $lineas, $efectivoCentavos, $uuid, $extra) {
                 // Idempotencia: el mismo uuid_operacion devuelve la venta ya registrada
                 $dup = $pdo->prepare('SELECT id_venta FROM ventas WHERE uuid_operacion = ?');
                 $dup->execute([$uuid]);
                 if ($existente = $dup->fetchColumn()) return ['id_venta' => (int)$existente, 'duplicada' => true];
 
                 $caja = Caja::abiertaBloqueada($pdo);
-                if (!$caja) throw new RuntimeException('No hay caja abierta. Abre la caja para poder cobrar.');
+                if (!$caja) throw new VentaConflicto('caja_cerrada', 'No hay caja abierta. Abre la caja para poder cobrar.');
 
                 $sel = $pdo->prepare('SELECT p.id_producto, p.codigo, p.nombre, p.peso, p.precio_venta, p.stock, c.unidad_peso
                     FROM productos p JOIN categorias c ON c.id_categoria = p.id_categoria
@@ -39,23 +59,30 @@ class Venta
                 foreach ($lineas as $l) {
                     $sel->execute([$l['id']]);
                     $p = $sel->fetch();
-                    if (!$p) throw new RuntimeException('Un producto ya no está disponible.');
+                    if (!$p) throw new VentaConflicto('producto_no_disponible', 'Un producto ya no está disponible.');
                     if ((int)$p['stock'] < $l['cantidad'])
-                        throw new RuntimeException("Stock insuficiente de «{$p['nombre']}» (disponible: {$p['stock']}).");
+                        throw new VentaConflicto('stock_insuficiente', "Stock insuficiente de «{$p['nombre']}» (disponible: {$p['stock']}).");
                     $precio = a_centavos($p['precio_venta']);
                     $sub = $precio * $l['cantidad'];
                     $total += $sub;
                     $detalle[] = [$p, $l['cantidad'], $precio, $sub];
                 }
-                if ($efectivoCentavos < $total) throw new RuntimeException('El efectivo recibido es menor al total.');
+                if (isset($extra['total_esperado']) && (int)$extra['total_esperado'] !== $total) {
+                    throw new VentaConflicto('precio_cambiado', 'Los precios cambiaron desde que se vendió sin conexión: al cliente se le cobró '
+                        . MONEDA . de_centavos((int)$extra['total_esperado']) . ' y con los precios de ahora el total sería ' . MONEDA . de_centavos($total) . '.');
+                }
+                if ($efectivoCentavos < $total) throw new VentaConflicto('efectivo_insuficiente', 'El efectivo recibido es menor al total.');
                 $cambio = $efectivoCentavos - $total;
 
                 // Ticket correlativo sin huecos: la fila de la secuencia queda bloqueada hasta el COMMIT
                 $pdo->exec("UPDATE secuencias SET valor = LAST_INSERT_ID(valor + 1) WHERE nombre = 'ticket'");
                 $ticket = (int)$pdo->query('SELECT LAST_INSERT_ID()')->fetchColumn();
 
-                $pdo->prepare('INSERT INTO ventas (id_usuario, total, efectivo, cambio, uuid_operacion, numero_ticket, id_caja) VALUES (?,?,?,?,?,?,?)')
-                    ->execute([$idUsuario, de_centavos($total), de_centavos($efectivoCentavos), de_centavos($cambio), $uuid, $ticket, $caja['id_caja']]);
+                $cols = 'id_usuario, total, efectivo, cambio, uuid_operacion, numero_ticket, id_caja';
+                $vals = [$idUsuario, de_centavos($total), de_centavos($efectivoCentavos), de_centavos($cambio), $uuid, $ticket, $caja['id_caja']];
+                $fecha = self::fechaLocal((string)($extra['fecha_iso'] ?? ''), (string)$caja['fecha_apertura']);
+                if ($fecha !== null) { $cols .= ', fecha'; $vals[] = $fecha; }
+                $pdo->prepare("INSERT INTO ventas ($cols) VALUES (" . implode(',', array_fill(0, count($vals), '?')) . ')')->execute($vals);
                 $idVenta = (int)$pdo->lastInsertId();
 
                 $det = $pdo->prepare('INSERT INTO detalle_venta
@@ -77,6 +104,24 @@ class Venta
             }
             throw $e;
         }
+    }
+
+    /**
+     * Momento real de una venta hecha sin conexión, en hora de El Salvador ('Y-m-d H:i:s'), o null si no viene / no es válido.
+     * Nunca en el futuro y nunca antes de la apertura de la caja donde queda registrada (así los reportes por fecha y el arqueo coinciden).
+     */
+    public static function fechaLocal(string $iso, string $apertura): ?string
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/', $iso)) return null;
+        try {
+            $f = (new DateTimeImmutable($iso))->setTimezone(new DateTimeZone('America/El_Salvador'))->format('Y-m-d H:i:s');
+        } catch (Exception $e) {
+            return null;
+        }
+        $ahora = date('Y-m-d H:i:s');
+        if ($f > $ahora) $f = $ahora;
+        if ($apertura !== '' && $f < $apertura) $f = $apertura;
+        return $f;
     }
 
     /**

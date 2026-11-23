@@ -77,9 +77,44 @@ php tests/run.php
 ```
 (Variables de entorno como en `tests/`: `ONIX_DB_PORT=3307`, `ONIX_DB_USER`, `ONIX_DB_PASS`. En Windows: `C:\xampp\php\php.exe …`.)
 
+## Bloque 2: app instalable y ventas sin internet (PWA híbrida)
+**No cambia la base de datos** (usa `uuid_operacion` y `updated_at` que ya existen). No hay migración.
+
+**Instalar.** Chrome/Edge/Android ofrecen «Instalar» (o el botón «Instalar app» del menú) cuando el sitio va por **https://** o
+**localhost**. En `http://192.168.x.x` (red local sin https) el navegador no permite Service Worker ni instalar: el POS sigue guardando
+ventas sin internet en IndexedDB, pero no abre sin conexión al recargar. InfinityFree da https gratis: úsalo ahí.
+
+**Qué hay sin internet.**
+- *Pantalla del POS*: el Service Worker (`sw.js`) guarda una copia **sin historial de ventas** (`?c=venta&a=pos`) cada vez que el POS carga con
+  internet; se borra al cerrar sesión y caduca a los 7 días. Estáticos (Bootstrap, iconos, SweetAlert2, JS/CSS propios): Cache First. Nada de `api()`
+  ni de respuestas `no-store` se cachea jamás. Al cambiar `sw.js` o su lista de precache, sube `VERSION`.
+- *Catálogo*: copia en IndexedDB de lo vendible (activo y con stock), se actualiza **por cambios** con `updated_at` (también si cambia la categoría)
+  cada ≤3 min y al volver la red. El cursor guarda «ahora − 5 s» porque `TIMESTAMP` tiene resolución de segundos.
+- *Cobrar sin conexión* (red caída **o** servidor inalcanzable **o** sesión vencida): la venta queda en la cola local con su `uuid_operacion`,
+  se imprime un comprobante **provisional** `TEMP-XXXXXX` y el stock local se reserva para no revender lo mismo. El ticket oficial se asigna al sincronizar.
+- *Indicador* (menú lateral y barra móvil): «En línea» (verde) / «Sin conexión · N pendientes» (amarillo) + botón de lista de la cola y de sincronizar ya.
+
+**Sincronización** (al volver la red, cada 20 s si hay pendientes, al volver a la pestaña o a mano): una a una, **en orden FIFO**, a `venta/sincronizar`
+(idempotente: repetir el mismo `uuid_operacion` devuelve la misma venta como «duplicada»). Antes de enviar se comprueba la sesión (sin renovarla) y se renueva el CSRF.
+
+| Respuesta | Qué pasa con la venta |
+|---|---|
+| OK / duplicada | Queda «Sincronizada» con su ticket real (se muestra 3 días). |
+| Red caída, 5xx, respuesta rara | Sigue «Pendiente»; reintenta con espera creciente (15 s → 2 min). No se salta el orden. |
+| 401 / 403 / 419 sin remedio | **Pausa** y aviso («inicia sesión de nuevo»). No se borra nada; se reanuda sola al volver a tener sesión. |
+| Conflicto de negocio (caja cerrada, stock 0, producto inactivo, **precio cambiado**) | **«Requiere revisión»** con el motivo exacto del servidor. Se puede *Reintentar* (p. ej. tras abrir la caja o ajustar inventario) o *Descartar* (solo quien puede anular ventas, con motivo, solo con internet, y queda en bitácora; si el servidor ya la tiene, no se descarta). |
+
+Reglas de negocio que conviene saber: la venta se registra con los **precios de hoy**; si el total difiere de lo que se le cobró al cliente offline
+no se registra (conflicto `precio_cambiado`). La venta conserva su **hora real** (en hora de El Salvador), sin pasar de «ahora» ni quedar antes de la apertura
+de la caja donde cae; el Kardex registra la hora de sincronización. Cada venta se sincroniza con el **usuario que la hizo**: si otra persona inicia sesión en ese
+navegador, la cola queda en pausa. Al **cerrar sesión con ventas pendientes** se muestra una alerta fuerte (sincronizar / cerrar de todos modos / cancelar).
+
+**Zona horaria.** PHP (`config.php`), la sesión de MariaDB (`Database::get()`, `Instalador::conectar`, `Respaldo`) y el JS (`America/El_Salvador`)
+usan siempre UTC-6. `Database::zonaHoraria()` lo verifica y `tests/SincronizacionTest.php` lo comprueba.
+
+**Pruebas.** `php tests/run.php` (incluye `SincronizacionTest`: catálogo incremental y paginado, venta offline idempotente, conflictos, descarte, zona horaria,
+manifest, íconos y `sw.js`). Opcional, de navegador real: `tests/pwa-navegador/` (ver su `LEEME.md`).
+
 ## Para los próximos bloques
-- **Recuperación de la Dueña**: hecha en el Bloque 1.3 (`AuthController::restablecerLlave`).
-- **Sincronización del catálogo (PWA)**: pedir `updated_at >= cursor` (con `>=` y restando 1 s: `TIMESTAMP` tiene resolución de segundos).
-  El catálogo usa `estado` (no se borra), así que las bajas también viajan en `updated_at`.
-- **Ventas offline**: `trg_ventas_caja_abierta` y `Venta::crear` exigen caja abierta *al sincronizar*. Hay que decidir qué hacer con una
-  venta hecha offline que llega con la caja ya cerrada (p. ej. asignarla a la caja abierta actual o pedir reabrir).
+- **Reporte de «ventas offline» para la Dueña**: la bitácora ya guarda `VENTA_OFFLINE_SINCRONIZADA` / `VENTA_OFFLINE_DESCARTADA`; falta una vista.
+- **Compras offline** y **Background Sync** (subir con la app cerrada): fuera del alcance del Bloque 2 (solo POS).

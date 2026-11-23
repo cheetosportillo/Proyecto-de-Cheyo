@@ -156,7 +156,9 @@ class AuthController extends Controller
         $u = $this->usuario();
         if ($u === null) $this->json(['ok' => true, 'activa' => false]);
         $resta = SESION_INACTIVIDAD - (time() - (int)($_SESSION['_actividad'] ?? time()));
-        $this->json(['ok' => true, 'activa' => true, 'restante' => max(0, $resta), 'total' => SESION_INACTIVIDAD]);
+        // csrf/usuario (Bloque 2): el modo offline renueva su token y comprueba que sincroniza con el mismo usuario. GET same-origin, no-store.
+        $this->json(['ok' => true, 'activa' => true, 'restante' => max(0, $resta), 'total' => SESION_INACTIVIDAD,
+                     'csrf' => self::csrf(), 'usuario' => (int)$u['id']]);
     }
 
     /** «Seguir trabajando»: renueva la sesión sin recargar. Vencida => ok=false (no 401, para no sacar al usuario de la pantalla). */

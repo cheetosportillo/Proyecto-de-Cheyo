@@ -20,3 +20,21 @@ body { background: #f4f3f0; }
   .sidebar { position: fixed; z-index: 1040; left: -260px; transition: left .25s; }
   .sidebar.show { left: 0; }
 }
+
+/* ===== Bloque 2: indicador de conexión y avisos del modo offline ===== */
+.onix-estado { display: flex; align-items: center; gap: .25rem; font-size: .78rem; color: #cfcfd4; }
+.onix-estado__main { flex: 1; display: flex; align-items: center; gap: .45rem; background: transparent; border: 0; color: inherit; padding: .15rem 0; text-align: left; }
+button.onix-estado__main { cursor: pointer; }
+button.onix-estado__main:hover .onix-texto { text-decoration: underline; }
+.onix-estado__btn { background: transparent; border: 1px solid #4a4a52; color: #cfcfd4; border-radius: .4rem; line-height: 1; padding: .2rem .4rem; }
+.onix-estado__btn:hover { background: #26262d; color: #fff; }
+.onix-punto { width: .6rem; height: .6rem; border-radius: 50%; display: inline-block; flex: none; background: #2ecc71; box-shadow: 0 0 0 .15rem rgba(46,204,113,.25); }
+.onix-estado--warn .onix-punto { background: #f1c40f; box-shadow: 0 0 0 .15rem rgba(241,196,15,.25); }
+.onix-estado--warn { color: #f5dc7a; }
+.onix-estado--off .onix-punto { background: #8a8a93; box-shadow: none; }
+.onix-estado__rev { font-size: .75rem; color: #ff8a80; margin-top: .15rem; }
+.onix-gira { display: inline-block; animation: onix-gira 1s linear infinite; }
+@keyframes onix-gira { to { transform: rotate(360deg); } }
+[data-compacto] .onix-estado { color: #212529; } [data-compacto] .onix-estado--warn { color: #8a6d00; } [data-compacto] .onix-estado__rev { color: #b02a37; }
+#onixToasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 2100; max-width: 22rem; pointer-events: none; }
+.onix-toast { pointer-events: auto; font-size: .9rem; }

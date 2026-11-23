@@ -7,19 +7,20 @@ let uuidOperacion = nuevoUuid();   // 1 uuid por venta: si el cobro se reintenta
 const cents = n => Math.round(n * 100);
 const peso3 = (p, u) => Number(p).toFixed(3) + (u === 'kilates' ? ' kt' : ' g');
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
-const hayOffline = () => typeof Offline !== 'undefined';   // módulo de la Parte 1 (Offline.js)
-const sinRed = () => !navigator.onLine;
-function marcarOffline() { $('avisoOffline')?.classList.toggle('d-none', navigator.onLine); }
+const hayOffline = () => typeof Offline !== 'undefined';   // public/js/offline.js (Bloque 2)
+/** Sin internet O servidor inalcanzable (wifi sin salida, hosting caído): en ambos casos se vende en modo local. */
+const sinRed = () => hayOffline() ? Offline.sinConexion() : !navigator.onLine;
+function marcarOffline() { $('avisoOffline')?.classList.toggle('d-none', !sinRed()); calcular(); }
+document.addEventListener('onix:estado', marcarOffline);
 addEventListener('online', marcarOffline); addEventListener('offline', marcarOffline);
+document.addEventListener('onix:sincronizado', () => buscar());   // el stock cambió
 
 async function buscar() {
     const q = $('buscador').value.trim(), cat = $('categoria').value;
     let items = null;
     if (!sinRed()) {
-        try {
-            const r = await api('venta', 'buscar', null, `&q=${encodeURIComponent(q)}&cat=${cat}`);
-            if (r.ok) { items = r.items; if (hayOffline() && !q && cat == 0) Offline.guardarCatalogo(items); }
-        } catch (e) { /* cae a catálogo local */ }
+        const r = await api('venta', 'buscar', null, `&q=${encodeURIComponent(q)}&cat=${cat}`, {sinRedirigir: true});
+        if (r.ok) items = r.items;   // si falla (sin red, sesión vencida…) cae al catálogo local
     }
     if (items === null && hayOffline()) items = await Offline.buscarCatalogo(q, cat);
     ultimosItems = items || [];
@@ -74,18 +75,53 @@ function imprimirTicket(url) {   // iframe oculto: el ticket se imprime solo al 
     setTimeout(() => f.remove(), 60000);
 }
 
+/** Comprobante provisional (no fiscal) para ventas guardadas sin conexión. */
+async function comprobanteLocal(e, efectivo, total, sesionVencida) {
+    const vuelto = Math.max(0, cents(efectivo) - cents(total)) / 100;
+    const res = await Swal.fire({
+        icon: 'warning', title: 'Venta guardada localmente',
+        html: `<b>Pendiente de sincronizar</b> · Comprobante <b>${esc(e.ticket)}</b><br>Total: <b>${fmt(total)}</b> · Vuelto: <b>${fmt(vuelto)}</b><br>`
+            + `<span class="small text-muted">${sesionVencida ? 'Tu sesión venció: inicia sesión de nuevo y se subirá sola. ' : 'Se subirá sola al volver la conexión. '}`
+            + 'El número de ticket oficial se asigna al sincronizar.</span>',
+        showCancelButton: true, confirmButtonText: '<i class="bi bi-printer"></i> Imprimir comprobante provisional',
+        cancelButtonText: 'Cerrar', confirmButtonColor: '#b8913a', allowOutsideClick: false});
+    if (res.isConfirmed) imprimirComprobanteLocal(e, efectivo, total, vuelto);
+}
+
+function imprimirComprobanteLocal(e, efectivo, total, vuelto) {
+    const filas = (e.detalle || []).map(i => `<tr><td>${esc(i.nombre)}</td><td align="right">${i.cantidad} × ${fmt(i.precio)}</td><td align="right">${fmt(i.cantidad * i.precio)}</td></tr>`).join('');
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+    f.srcdoc = `<!DOCTYPE html><meta charset="utf-8"><style>body{font:12px monospace;width:72mm;margin:0 auto}td{padding:1px 0}h3,p{text-align:center;margin:2px}</style>`
+        + `<h3>${esc(APP.negocio || '')}</h3><p><b>COMPROBANTE PROVISIONAL · NO FISCAL</b></p><p>${esc(e.ticket)} · ${esc(new Date(e.creado).toLocaleString('es-SV', {timeZone: 'America/El_Salvador'}))}</p>`
+        + `<table width="100%">${filas}</table><hr><p>Total ${fmt(total)}<br>Efectivo ${fmt(efectivo)}<br>Vuelto ${fmt(vuelto)}</p>`
+        + `<p>Venta pendiente de sincronizar.<br>El ticket oficial se emite al subirla.</p><script>onload=()=>print()<\/script>`;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 60000);
+}
+
 async function cobrar() {
     if (cobrando) return;
     cobrando = true; $('btnCobrar').disabled = true;
     const payload = {uuid_operacion: uuidOperacion, efectivo: cents(parseFloat($('efectivo').value) || 0) / 100,
                      items: [...carrito.values()].map(i => ({id: i.id, cantidad: i.cantidad}))};
+    const detalle = [...carrito.values()].map(i => ({id: i.id, codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad, precio: i.precio}));
+    const total = totalCents() / 100, ahora = new Date().toISOString();
     try {
         let r = null;
-        if (!sinRed()) { try { r = await api('venta', 'cobrar', payload); } catch (e) { r = null; } }
-        if (r === null) {   // sin internet: guardar pendiente (se sincroniza con el MISMO uuid, sin duplicar)
-            if (!hayOffline()) { aviso(false, 'Sin conexión y el modo offline no está disponible.'); return; }
-            const temp = await Offline.guardarVentaPendiente({...payload, fecha: new Date().toISOString(), total: totalCents() / 100});
-            await Swal.fire({icon: 'info', title: 'Venta guardada sin conexión', html: `Ticket <b>${esc(temp?.ticket || 'TEMP-' + uuidOperacion.slice(0, 6).toUpperCase())}</b><br>Se sincronizará al volver internet.`, confirmButtonColor: '#b8913a'});
+        if (!sinRed()) {
+            r = await api('venta', 'cobrar', payload, '', {sinRedirigir: true});
+            if (r.http === 419 && hayOffline()) { await Offline.refrescarSesion(); r = await api('venta', 'cobrar', payload, '', {sinRedirigir: true}); }   // token viejo: se renueva y se reintenta una vez
+        }
+        // Se guarda localmente si no hubo servidor (red caída, timeout, 5xx, respuesta rara) o la sesión venció.
+        // Es seguro: se enviará con el MISMO uuid; si el cobro sí llegó al servidor, la sincronización lo detecta como duplicada.
+        const alCola = r === null || r.sinConexion || r.invalida || r.http === 401 || r.http >= 500;
+        if (alCola) {
+            if (!hayOffline()) { aviso(false, 'Sin conexión y el modo offline no está disponible en este navegador.'); return; }
+            let e;
+            try { e = await Offline.guardarVentaPendiente({...payload, fecha: ahora, total, detalle}); }
+            catch (err) { aviso(false, 'No se pudo guardar la venta en este equipo (' + (err.message || err) + '). NO entregues las piezas; la venta no quedó registrada.'); return; }
+            await comprobanteLocal(e, payload.efectivo, total, r && r.http === 401);
         } else {
             if (!r.ok) { aviso(false, r.msg); return; }
             const res = await Swal.fire({icon: 'success', title: 'Venta registrada · Ticket #' + String(r.numero_ticket).padStart(6, '0'),

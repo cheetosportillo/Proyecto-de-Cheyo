@@ -5,6 +5,7 @@ require_once __DIR__ . '/../models/Caja.php';
 require_once __DIR__ . '/../models/Venta.php';
 require_once __DIR__ . '/../models/Producto.php';
 require_once __DIR__ . '/../models/Categoria.php';
+require_once __DIR__ . '/../models/Sincronizacion.php';
 
 class VentaController extends Controller
 {
@@ -30,6 +31,56 @@ class VentaController extends Controller
             'puedeAnular'  => $this->puede('ventas.anular'),
             'puedeReimprimir' => $this->puede('ventas.reimprimir'),
         ]);
+    }
+
+    /**
+     * Copia del POS para uso sin conexión (la guarda el Service Worker). Es la misma pantalla SIN historial de ventas:
+     * así no queda en el equipo información de ventas, solo el programa, las categorías y el nombre de quien cobra.
+     */
+    public function pos(): void
+    {
+        $this->requirePermiso('ventas.cobrar');
+        $hoy = date('Y-m-d');
+        $this->render('ventas/index', [
+            'titulo'     => 'Ventas (Caja)',
+            'categorias' => Categoria::listar(true),
+            'h'          => ['filas' => [], 'total_periodo' => '0.00', 'num_activas' => 0, 'num' => 0, 'pagina' => 1, 'paginas' => 1, 'desde' => $hoy, 'hasta' => $hoy],
+            'desde' => $hoy, 'hasta' => $hoy,
+            'tabHistorial' => false,
+            'cajaAbierta'  => Caja::abierta() !== null,
+            'verTodas'     => $this->idFiltroUsuario() === null,
+            'puedeAnular'  => $this->puede('ventas.anular'),
+            'puedeReimprimir' => $this->puede('ventas.reimprimir'),
+            'sinHistorial' => true,
+        ]);
+    }
+
+    /** Catálogo vendible para IndexedDB: completo la primera vez y luego solo cambios (updated_at). Ver Sincronizacion::catalogo(). */
+    public function catalogo(): void
+    {
+        $this->requirePermiso('ventas.cobrar', true);
+        try {
+            $r = Sincronizacion::catalogo((string)($_GET['desde'] ?? ''), (int)($_GET['desde_id'] ?? 0), (string)($_GET['completo'] ?? '0') === '1', (int)($_GET['limite'] ?? 1000));
+        } catch (InvalidArgumentException $e) {
+            $this->json(['ok' => false, 'msg' => $e->getMessage()], 400);
+        }
+        $this->json(['ok' => true] + $r);
+    }
+
+    /** Sube UNA venta hecha sin conexión (el equipo las envía en orden FIFO). Idempotente por uuid_operacion. */
+    public function sincronizar(): void
+    {
+        $this->requirePermiso('ventas.cobrar', true);
+        $this->verificarCsrf();
+        $this->json(Sincronizacion::venta((int)$this->usuario()['id'], $this->entrada()));
+    }
+
+    /** Descarta (con bitácora) una venta offline «por revisar». Solo quien puede anular ventas. */
+    public function descartar(): void
+    {
+        $this->requirePermiso('ventas.anular', true);
+        $this->verificarCsrf();
+        $this->json(Sincronizacion::descartar((int)$this->usuario()['id'], $this->entrada()));
     }
 
     public function buscar(): void

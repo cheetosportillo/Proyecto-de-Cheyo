@@ -17,3 +17,10 @@ ServerSignature Off
     RewriteEngine On
     RewriteRule (^|/)\.git(/|$) - [F,L]
 </IfModule>
+
+# Bloque 2 (PWA): el Service Worker y el manifest no deben quedar en la caché HTTP, o las actualizaciones tardan en llegar.
+<IfModule mod_headers.c>
+    <FilesMatch "^(sw\.js|manifest\.json)$">
+        Header set Cache-Control "no-cache, max-age=0"
+    </FilesMatch>
+</IfModule>
